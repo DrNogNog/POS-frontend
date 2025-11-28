@@ -1,14 +1,12 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
 import { useState } from "react";
+import { usePathname } from "next/navigation"; // for active link highlighting
 
-interface SidebarProps {
-  onSelectPage: (page: string) => void;
-  activePage: string;
-}
-
-export default function Sidebar({ onSelectPage, activePage }: SidebarProps) {
+export default function Sidebar() {
+  const pathname = usePathname(); // current route
   const [openMenu, setOpenMenu] = useState<string | null>(null);
 
   const menus = [
@@ -16,38 +14,56 @@ export default function Sidebar({ onSelectPage, activePage }: SidebarProps) {
       key: "items",
       title: "Items & Services",
       links: [
-        "Item Library",
-        "Image Library",
-        "Categories",
-        "Stock Overview",
-        "History",
-        "Stock Counts",
-        "Purchase Orders",
-        "Vendors",
-        "Pending Restocks",
-        "Gift Cards",
-        "Subscription Plans",
+        { name: "Item Library", href: "/products" },
+        { name: "Image Library", href: "/image-library" },
+        { name: "Categories", href: "/categories" },
+        { name: "Stock Overview", href: "/stock-overview" },
+        { name: "History", href: "/history" },
+        { name: "Stock Counts", href: "/stock-counts" },
+        { name: "Purchase Orders", href: "/purchase-orders" },
+        { name: "Vendors", href: "/vendors" },
+        { name: "Pending Restocks", href: "/pending-restocks" },
+        { name: "Gift Cards", href: "/gift-cards" },
+        { name: "Subscription Plans", href: "/subscription-plans" },
       ],
     },
     {
       key: "orders",
       title: "Orders",
-      links: ["All Orders", "Shipments", "Order Partners", "Fulfillment Settings"],
+      links: [
+        { name: "All Orders", href: "/orders" },
+        { name: "Shipments", href: "/shipments" },
+        { name: "Order Partners", href: "/order-partners" },
+        { name: "Fulfillment Settings", href: "/fulfillment-settings" },
+      ],
     },
     {
       key: "invoices",
       title: "Invoices",
-      links: ["Overview", "Projects", "Invoices", "Recurring Series", "Estimates", "Reports", "Apps"],
+      links: [
+        { name: "Overview", href: "/invoices" },
+        { name: "Projects", href: "/projects" },
+        { name: "Invoices", href: "/invoices-list" },
+        { name: "Recurring Series", href: "/recurring-series" },
+        { name: "Estimates", href: "/estimates" },
+        { name: "Reports", href: "/reports" },
+        { name: "Apps", href: "/apps" },
+      ],
     },
     {
       key: "sales",
       title: "Sales Summary",
-      links: ["Item Sales", "Sales Trends", "Category Sales", "Gift Cards", "Inventory Sell-through Rates"],
+      links: [
+        { name: "Item Sales", href: "/item-sales" },
+        { name: "Sales Trends", href: "/sales-trends" },
+        { name: "Category Sales", href: "/category-sales" },
+        { name: "Gift Cards", href: "/gift-cards-sales" },
+        { name: "Inventory Sell-through Rates", href: "/inventory-sell-through" },
+      ],
     },
   ];
 
-  const isActive = (item: string) =>
-    activePage === item ? "bg-zinc-300 dark:bg-zinc-700" : "";
+  const isActive = (href: string) => pathname === href ? "bg-zinc-300 dark:bg-zinc-700" : "";
 
   return (
     <aside className="w-64 bg-white dark:bg-zinc-900 border-r border-zinc-200 dark:border-zinc-800 p-4 space-y-4">
@@ -57,17 +73,20 @@ export default function Sidebar({ onSelectPage, activePage }: SidebarProps) {
       </div>
 
       {/* Home */}
-      <button
+      <Link
+        href="/"
         className={`w-full block rounded-xl border border-zinc-200 dark:border-zinc-700 p-3 font-semibold
-        dark:text-white hover:bg-zinc-200 dark:hover:bg-zinc-700 ${isActive("home")}`}
-        onClick={() => onSelectPage("home")}
+        dark:text-white hover:bg-zinc-200 dark:hover:bg-zinc-700 ${isActive("/")}`}
       >
         🏠 Home
-      </button>
+      </Link>
 
-      {/* Menus */}
+      {/* Menu Sections */}
       {menus.map((menu) => (
-        <div key={menu.key} className="rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 p-3 shadow-sm">
+        <div
+          key={menu.key}
+          className="rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 p-3 shadow-sm"
+        >
           <button
             onClick={() => setOpenMenu(openMenu === menu.key ? null : menu.key)}
             className="w-full flex justify-between items-center font-semibold dark:text-white"
@@ -78,14 +97,14 @@ export default function Sidebar({ onSelectPage, activePage }: SidebarProps) {
 
           {openMenu === menu.key && (
             <div className="mt-3 pl-2 flex flex-col gap-2 text-sm">
-              {menu.links.map((item) => (
-                <button
-                  key={item}
-                  className={`text-left rounded-md px-2 py-1 hover:bg-zinc-200 dark:hover:bg-zinc-700 dark:text-zinc-300 ${isActive(item)}`}
-                  onClick={() => onSelectPage(item)}
+              {menu.links.map((link) => (
+                <Link
+                  key={link.name}
+                  href={link.href}
+                  className={`text-left rounded-md px-2 py-1 hover:bg-zinc-200 dark:hover:bg-zinc-700 dark:text-zinc-300 ${isActive(link.href)}`}
                 >
-                  {item}
-                </button>
+                  {link.name}
+                </Link>
               ))}
             </div>
           )}

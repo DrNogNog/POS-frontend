@@ -1,10 +1,12 @@
 "use client";
 
-import { useState, useEffect, Fragment, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import Sidebar from "@/components/sidebar";
 import { api } from "@/lib/api";
-import { ChevronDown, ChevronRight } from "lucide-react";
-import { Menu } from "@headlessui/react";
+import ColumnDropdown from "@/components/ColumnDropdown";
+import ProductModal from "@/components/ProductModal";
+import QuickCreateProduct from "@/components/QuickCreateProduct";
+import ProductTableRow from "@/components/ProductTableRow";
 
 // --------------------
 // Types
@@ -14,359 +16,151 @@ interface Variant {
   sku: string;
   price: number;
 }
-
-interface Product {
+interface ProductType {
   id: string;
   name: string;
-  sku: string;
+  sku?: string | null;
   price: number;
-  variants?: Variant[];
+  description?: string | null;
 }
-
-// --------------------
-// Product Table Row Component
-// --------------------
-function ProductTableRow({
-  product,
-  openIds,
-  toggleOpen,
-}: {
-  product: Product;
-  openIds: Set<string>;
-  toggleOpen: (id: string) => void;
-}) {
-  return (
-    <Fragment>
-      <tr
-        className="hover:bg-zinc-50 dark:hover:bg-zinc-800 cursor-pointer"
-        onClick={() => product.variants && toggleOpen(product.id)}
-      >
-        <td className="px-6 py-4 flex items-center gap-3">
-          {product.variants ? (
-            openIds.has(product.id) ? (
-              <ChevronDown className="h-5 w-5 text-zinc-500" />
-            ) : (
-              <ChevronRight className="h-5 w-5 text-zinc-500" />
-            )
-          ) : (
-            <span className="w-5" />
-          )}
-          <span className="font-medium">{product.name}</span>
-        </td>
-        <td className="px-6 py-4 font-mono text-sm text-zinc-600 dark:text-zinc-400">
-          {product.sku}
-        </td>
-        <td className="px-6 py-4 text-right font-semibold">${product.price.toFixed(2)}</td>
-        <td className="px-6 py-4 text-right">
-          <Menu as="div" className="relative inline-block text-left">
-            <Menu.Button className="inline-flex justify-center w-full rounded-md p-1 hover:bg-zinc-200 dark:hover:bg-zinc-700">
-              <span className="sr-only">Open options</span>
-              <svg className="w-5 h-5 text-zinc-500" fill="currentColor" viewBox="0 0 20 20">
-                <path d="M6 10a2 2 0 114 0 2 2 0 01-4 0zm4 0a2 2 0 114 0 2 2 0 01-4 0zM2 10a2 2 0 114 0 2 2 0 01-4 0z" />
-              </svg>
-            </Menu.Button>
-            <Menu.Items className="absolute right-0 mt-2 w-56 origin-top-right bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 divide-y divide-zinc-100 dark:divide-zinc-700 rounded-md shadow-lg focus:outline-none z-50">
-              <div className="px-1 py-1">
-                {[
-                  "Edit",
-                  "Delete",
-                  "Duplicate",
-                  "Order More",
-                  "Update Categories",
-                  "Set as Non-Taxable",
-                  "Archive",
-                  "Update Low Stock Alert",
-                ].map((action) => (
-                  <Menu.Item key={action}>
-                    {({ active }) => (
-                      <button
-                        className={`${
-                          active ? "bg-zinc-100 dark:bg-zinc-700" : ""
-                        } group flex rounded-md items-center w-full px-2 py-2 text-sm`}
-                        onClick={() => console.log(`${action} clicked for ${product.name}`)}
-                      >
-                        {action}
-                      </button>
-                    )}
-                  </Menu.Item>
-                ))}
-              </div>
-            </Menu.Items>
-          </Menu>
-        </td>
-      </tr>
-
-      {/* Variants */}
-      {product.variants &&
-        openIds.has(product.id) &&
-        product.variants.map((v, i) => (
-          <tr key={`${product.id}-${i}`} className="bg-zinc-50 dark:bg-zinc-800">
-            <td className="px-6 py-3 pl-16 text-sm text-zinc-600 dark:text-zinc-400">
-              Size {v.size}
-            </td>
-            <td className="px-6 py-3 font-mono text-sm">{v.sku}</td>
-            <td className="px-6 py-3 text-right text-sm">${v.price.toFixed(2)}</td>
-            <td></td>
-          </tr>
-        ))}
-    </Fragment>
-  );
+interface Product extends ProductType {
+  variants?: Variant[];
 }
 
 // --------------------
 // Product Table Component
 // --------------------
-function ProductTable({
-  products,
-  openIds,
-  toggleOpen,
-}: {
+interface ProductTableProps {
   products: Product[];
+  visibleColumns: Set<string>;
   openIds: Set<string>;
   toggleOpen: (id: string) => void;
-}) {
+  editProduct: (id: string) => void;
+  duplicateProduct: (product: Product) => void;
+  deleteProduct: (id: string) => void;
+  orderMore: (id: string) => void;
+  setNonTaxable: (id: string) => void;
+  archiveProduct: (id: string) => void;
+  updateLowStockAlert: (id: string) => void;
+}
+
+function ProductTable({
+  products,
+  visibleColumns,
+  editProduct,
+  duplicateProduct,
+  deleteProduct,
+  orderMore,
+  setNonTaxable,
+  archiveProduct,
+  updateLowStockAlert,
+}: ProductTableProps) {
   return (
     <div className="bg-white dark:bg-zinc-900 rounded-xl shadow-xl border">
-      <table className="w-full">
-        <thead className="bg-zinc-50 dark:bg-zinc-800 border-b">
-          <tr>
-            <th className="px-6 py-4 text-left text-xs font-medium text-zinc-600 dark:text-zinc-400 uppercase tracking-wider">
-              Item
-            </th>
-            <th className="px-6 py-4 text-left text-xs font-medium text-zinc-600 dark:text-zinc-400 uppercase tracking-wider">
-              SKU
-            </th>
-            <th className="px-6 py-4 text-right text-xs font-medium text-zinc-600 dark:text-zinc-400 uppercase tracking-wider">
-              Price
-            </th>
-            <th className="px-6 py-4 text-right text-xs font-medium text-zinc-600 dark:text-zinc-400 uppercase tracking-wider">
-              Actions
-            </th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-zinc-200 dark:divide-zinc-700">
-          {products.length === 0 ? (
+      {/* Scrollable container */}
+      <div className="max-h-[800px] overflow-y-auto">
+        <table className="w-full">
+          <thead className="bg-zinc-50 dark:bg-zinc-800 border-b sticky top-0 z-10">
             <tr>
-              <td colSpan={4} className="px-6 py-12 text-center text-zinc-500">
-                No products yet. Add one above!
-              </td>
+              {visibleColumns.has("Item") && <th className="px-6 py-3 text-left">Item</th>}
+              {visibleColumns.has("SKU") && <th className="px-6 py-3 text-left">SKU</th>}
+              {visibleColumns.has("Price") && <th className="px-6 py-3 text-right">Price</th>}
+              {visibleColumns.has("Actions") && <th className="px-6 py-3 text-right">Actions</th>}
             </tr>
-          ) : (
-            products.map((product) => (
-              <ProductTableRow
-                key={product.id}
-                product={product}
-                openIds={openIds}
-                toggleOpen={toggleOpen}
-              />
-            ))
-          )}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-// --------------------
-// Modal Component
-// --------------------
-interface ProductModalProps {
-  isOpen: boolean;
-  close: () => void;
-  createProduct: () => void;
-  newName: string;
-  setNewName: (v: string) => void;
-  newPrice: string;
-  setNewPrice: (v: string) => void;
-  images: File[];
-  setImages: React.Dispatch<React.SetStateAction<File[]>>;
-  handleFiles: (files: FileList | null) => void;
-  handleDrop: (e: React.DragEvent<HTMLDivElement>) => void;
-  handleDragOver: (e: React.DragEvent<HTMLDivElement>) => void;
-}
-function ProductModal({
-  isOpen,
-  close,
-  createProduct,
-  newName,
-  setNewName,
-  newPrice,
-  setNewPrice,
-  images,
-  setImages,
-  handleFiles,
-  handleDrop,
-  handleDragOver,
-}: ProductModalProps) {
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  const openFileDialog = () => {
-    fileInputRef.current?.click();
-  };
-
-  if (!isOpen) return null;
-
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-40 flex justify-center items-start pt-20 z-50">
-      <div className="bg-white p-8 rounded-xl max-w-3xl w-full shadow-xl overflow-y-auto max-h-[90vh]">
-        <h1 className="text-2xl font-bold mb-6">Create New Item</h1>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-          <input
-            type="text"
-            placeholder="Product Name"
-            className="border p-3 rounded w-full"
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
-          />
-          <input
-            type="number"
-            placeholder="Price"
-            className="border p-3 rounded w-full"
-            value={newPrice}
-            onChange={(e) => setNewPrice(e.target.value)}
-          />
-          <textarea
-            placeholder="Description"
-            className="border p-3 rounded w-full col-span-1 md:col-span-2"
-          />
-
-          {/* Image uploader */}
-          <div
-            className="border p-3 rounded w-full col-span-1 md:col-span-2 flex flex-col items-center justify-center h-32 text-gray-400 text-center cursor-pointer hover:bg-gray-100 transition"
-            onClick={openFileDialog}
-            onDrop={handleDrop}
-            onDragOver={handleDragOver}
-          >
-            {images.length === 0
-              ? "Drop images here or click to upload"
-              : `${images.length} image(s) selected`}
-            <input
-              type="file"
-              multiple
-              accept="image/*"
-              ref={fileInputRef} // ✅ attach ref
-              className="hidden"
-              onChange={(e) => handleFiles(e.target.files)}
-            />
-          </div>
-
-          {images.length > 0 && (
-            <div className="col-span-1 md:col-span-2 mt-4 grid grid-cols-3 gap-2">
-              {images.map((file, index) => (
-                <img
-                  key={index}
-                  src={URL.createObjectURL(file)}
-                  alt={file.name}
-                  className="w-full h-24 object-cover rounded"
+          </thead>
+          <tbody className="divide-y divide-zinc-200 dark:divide-zinc-700">
+            {products.length === 0 ? (
+              <tr>
+                <td colSpan={4} className="px-6 py-12 text-center text-zinc-500 dark:text-zinc-400">
+                  No products yet. Add one above!
+                </td>
+              </tr>
+            ) : (
+              products.map((product) => (
+                <ProductTableRow
+                  key={product.id}
+                  product={product}
+                  visibleColumns={visibleColumns}
+                  editProduct={editProduct}
+                  duplicateProduct={duplicateProduct}
+                  deleteProduct={deleteProduct}
+                  orderMore={orderMore}
+                  setNonTaxable={setNonTaxable}
+                  archiveProduct={archiveProduct}
+                  updateLowStockAlert={updateLowStockAlert}
                 />
-              ))}
-            </div>
-          )}
-        </div>
-
-        <div className="space-y-4">
-          <h1 className="text-xl font-semibold">Taxes</h1>
-          <h1 className="text-xl font-semibold">Manage Inventory</h1>
-          <h1 className="text-xl font-semibold">Variations</h1>
-          <h1 className="text-xl font-semibold">Modifiers</h1>
-          <h1 className="text-xl font-semibold">Bundle</h1>
-          <h1 className="text-xl font-semibold">Customer Attributes</h1>
-        </div>
-
-        <div className="flex justify-end gap-3 mt-6">
-          <button
-            className="bg-gray-300 text-black px-4 py-2 rounded hover:bg-gray-400"
-            onClick={close}
-          >
-            Cancel
-          </button>
-          <button
-            className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
-            onClick={createProduct}
-          >
-            + Add Item
-          </button>
-        </div>
+              ))
+            )}
+          </tbody>
+        </table>
       </div>
     </div>
   );
 }
-
-// --------------------
-// Quick Create Form Component
-// --------------------
-function QuickCreateProduct({
-  newName,
-  setNewName,
-  newPrice,
-  setNewPrice,
-  createProduct,
-}: {
-  newName: string;
-  setNewName: (v: string) => void;
-  newPrice: string;
-  setNewPrice: (v: string) => void;
-  createProduct: () => void;
-}) {
-  const nameInputRef = useRef<HTMLInputElement>(null);
-
-  const handleContainerClick = () => {
-    nameInputRef.current?.focus();
-  };
-
-  return (
-    <div onClick={handleContainerClick} className="cursor-text">
-      <div className="text-xl font-semibold dark:text-white mb-4">
-        Quick Create Product
-      </div>
-      <div className="max-w-2xl bg-white dark:bg-zinc-900 p-6 rounded-2xl shadow-lg mb-10 flex gap-4">
-        <input
-          ref={nameInputRef}
-          type="text"
-          className="border p-2 rounded flex-1"
-          placeholder="Product Name"
-          value={newName}
-          onChange={(e) => setNewName(e.target.value)}
-        />
-        <input
-          type="number"
-          className="border p-2 rounded w-32"
-          placeholder="Price"
-          value={newPrice}
-          onChange={(e) => setNewPrice(e.target.value)}
-        />
-        <button
-          className="bg-green-600 text-white py-2 px-4 rounded hover:bg-green-700"
-          onClick={createProduct}
-        >
-          + Add Item
-        </button>
-      </div>
-    </div>
-  );
-}
-
-
 
 // --------------------
 // Main Products Page
 // --------------------
 export default function ProductsPage() {
-  const [activePage, setActivePage] = useState("Item Library");
   const [products, setProducts] = useState<Product[]>([]);
+  const [activePage, setActivePage] = useState("Item Library");
   const [openIds, setOpenIds] = useState<Set<string>>(new Set());
   const [newName, setNewName] = useState("");
   const [newPrice, setNewPrice] = useState("");
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [newSku, setNewSku] = useState("");
+  const [newDescription, setNewDescription] = useState("");
   const [images, setImages] = useState<File[]>([]);
+  const [isModalOpen, setIsModalOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const modalOpen = () => setIsModalOpen(true);
-  const modalClose = () => {
-    setIsModalOpen(false);
-    setImages([]);
+  const allColumns = ["Item", "SKU", "Price", "Actions"];
+  const [visibleColumns, setVisibleColumns] = useState<Set<string>>(
+    new Set(allColumns)
+  );
+
+  // --------------------
+  // CRUD Actions
+  // --------------------
+  const deleteProduct = (id: string) => {
+    fetch(`http://localhost:4000/api/products/${id}`, { method: "DELETE" })
+      .then(() => setProducts((prev) => prev.filter((p) => p.id !== id)))
+      .catch(console.error);
   };
+
+  const duplicateProduct = async (product: Product) => {
+  try {
+    const formData = new FormData();
+    formData.append("name", product.name + " (Copy)");
+    formData.append("price", product.price.toString());
+    if (product.sku) formData.append("sku", product.sku);
+    if (product.description) formData.append("description", product.description);
+
+    // No images for duplicate (optional)
+    // if you want to copy images, you need file blobs
+
+    const res = await fetch("http://localhost:4000/api/products", {
+      method: "POST",
+      body: formData, // do NOT set Content-Type manually
+    });
+
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`Failed to duplicate product: ${text}`);
+    }
+
+    const newProduct = await res.json();
+    setProducts((prev) => [...prev, newProduct]);
+  } catch (err) {
+    console.error("Failed to duplicate product", err);
+  }
+};
+
+
+  const editProduct = (id: string) => console.log("Edit", id);
+  const orderMore = (id: string) => console.log("Order more", id);
+  const setNonTaxable = (id: string) => console.log("Set non-taxable", id);
+  const archiveProduct = (id: string) => console.log("Archive", id);
+  const updateLowStockAlert = (id: string) => console.log("Update low stock alert", id);
 
   const toggleOpen = (id: string) => {
     setOpenIds((prev) => {
@@ -375,6 +169,24 @@ export default function ProductsPage() {
       return next;
     });
   };
+
+  const modalOpen = () => setIsModalOpen(true);
+  const modalClose = () => {
+    setIsModalOpen(false);
+    setImages([]);
+  };
+
+  const handleFiles = (files: FileList | null) => {
+    if (!files) return;
+    setImages((prev) => [...prev, ...Array.from(files)]);
+  };
+
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    handleFiles(e.dataTransfer.files);
+  };
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => e.preventDefault();
+  const openFileDialog = () => fileInputRef.current?.click();
 
   async function load() {
     try {
@@ -387,39 +199,33 @@ export default function ProductsPage() {
     }
   }
 
-  const handleFiles = (selectedFiles: FileList | null) => {
-    if (!selectedFiles) return;
-    setImages((prev) => [...prev, ...Array.from(selectedFiles)]);
-  };
-
-  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    handleFiles(e.dataTransfer.files);
-  };
-
-  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-  };
-
-  const openFileDialog = () => {
-    fileInputRef.current?.click();
-  };
-
   async function createProduct() {
-    if (!newName.trim() || !newPrice) return;
+    if (!newName.trim() || !newPrice.trim()) {
+      alert("Name and Price are required.");
+      return;
+    }
 
     const formData = new FormData();
     formData.append("name", newName.trim());
-    formData.append("price", newPrice);
+    formData.append("price", newPrice.trim());
+    if (newSku.trim()) formData.append("sku", newSku.trim());
+    if (newDescription.trim()) formData.append("description", newDescription.trim());
     images.forEach((img) => formData.append("images", img));
 
     try {
-      await api("/products", { method: "POST", body: formData });
+      await fetch("http://localhost:4000/api/products", {
+        method: "POST",
+        body: formData, // DO NOT set Content-Type manually
+      });
+
+      // reset
       setNewName("");
       setNewPrice("");
+      setNewSku("");
+      setNewDescription("");
       setImages([]);
       modalClose();
-      load();
+      load(); // refresh table after creation
     } catch (err) {
       console.error(err);
     }
@@ -431,7 +237,7 @@ export default function ProductsPage() {
 
   return (
     <div className="flex min-h-screen bg-zinc-100 dark:bg-black">
-      <Sidebar onSelectPage={setActivePage} activePage={activePage} />
+      <Sidebar/>
       <main className="flex-1 p-10">
         {activePage === "Item Library" && (
           <div className="mx-auto max-w-6xl">
@@ -450,7 +256,7 @@ export default function ProductsPage() {
               </button>
             </div>
 
-            {/* Modal */}
+            {/* Modals */}
             <ProductModal
               isOpen={isModalOpen}
               close={modalClose}
@@ -459,15 +265,17 @@ export default function ProductsPage() {
               setNewName={setNewName}
               newPrice={newPrice}
               setNewPrice={setNewPrice}
+              newSku={newSku}
+              setNewSku={setNewSku}
+              newDescription={newDescription}
+              setNewDescription={setNewDescription}
               images={images}
               setImages={setImages}
               handleFiles={handleFiles}
               handleDrop={handleDrop}
               handleDragOver={handleDragOver}
-              openFileDialog={openFileDialog}
             />
 
-            {/* Quick Create */}
             <QuickCreateProduct
               newName={newName}
               setNewName={setNewName}
@@ -476,8 +284,28 @@ export default function ProductsPage() {
               createProduct={createProduct}
             />
 
+            <div className="flex justify-end mb-4">
+              <ColumnDropdown
+                options={allColumns}
+                selected={visibleColumns}
+                setSelected={setVisibleColumns}
+              />
+            </div>
+
             {/* Product Table */}
-            <ProductTable products={products} openIds={openIds} toggleOpen={toggleOpen} />
+            <ProductTable
+              products={products}
+              openIds={openIds}
+              toggleOpen={toggleOpen}
+              visibleColumns={visibleColumns}
+              editProduct={editProduct}
+              duplicateProduct={duplicateProduct}
+              deleteProduct={deleteProduct}
+              orderMore={orderMore}
+              setNonTaxable={setNonTaxable}
+              archiveProduct={archiveProduct}
+              updateLowStockAlert={updateLowStockAlert}
+            />
           </div>
         )}
       </main>
