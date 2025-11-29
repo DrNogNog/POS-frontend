@@ -34,33 +34,33 @@ export async function generateEstimatePdf(data: Payload) {
   let y = height - margin;
 
   // COMPANY HEADER (Left)
-  page.drawText(data.companyName || "Optum Health", {
+  page.drawText(data.companyName || "", {
     x: margin,
     y,
     size: 16,
     font: bold,
   });
   y -= 20;
-  page.drawText(data.companyAddr1 || "1903 80th Street", { x: margin, y, size: 11, font });
+  page.drawText(data.companyAddr1 || "", { x: margin, y, size: 11, font });
   y -= 18;
-  page.drawText(`Phone #: ${data.phone || "9298882308"}`, { x: margin, y, size: 11, font });
+  page.drawText(`Phone #: ${data.phone || ""}`, { x: margin, y, size: 11, font });
 
   // EMAIL & WEBSITE (Center)
   const centerX = width / 2 - 40;
   y = height - margin - 5;
 
-  page.drawText("E-mail", { x: centerX, y, size: 11, font });
-  page.drawText(data.email || "gordoncs@outlook.com", {
-    x: centerX + 70,
+  page.drawText("E-mail", { x: centerX-80, y, size: 11, font });
+  page.drawText(data.email || "", {
+    x: centerX-30,
     y,
     size: 11,
     font,
     color: rgb(0, 0.3, 0.8),
   });
 
-  page.drawText("Web Site", { x: centerX, y: y - 20, size: 11, font });
-  page.drawText(data.website || "gordonng.org", {
-    x: centerX + 70,
+  page.drawText("Web Site", { x: centerX-80, y: y - 20, size: 11, font });
+  page.drawText(data.website || "", {
+    x: centerX-30,
     y: y - 20,
     size: 11,
     font,
@@ -119,7 +119,7 @@ export async function generateEstimatePdf(data: Payload) {
   });
   page.drawText("Name / Address", { x: margin + 10, y: y - 18, size: 11, font: bold });
 
-  const billLines = (data.billTo || "1903 80th Street\nBrooklyn\nNew York 11214").split("\n");
+  const billLines = (data.billTo || "").split("\n");
   let by = y - 38;
   for (const line of billLines) {
     if (line.trim()) {
