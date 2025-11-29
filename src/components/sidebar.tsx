@@ -23,42 +23,18 @@ export default function Sidebar() {
         { name: "Purchase Orders", href: "/purchase-orders" },
         { name: "Vendors", href: "/vendors" },
         { name: "Pending Restocks", href: "/pending-restocks" },
-        { name: "Gift Cards", href: "/gift-cards" },
-        { name: "Subscription Plans", href: "/subscription-plans" },
-      ],
-    },
-    {
-      key: "orders",
-      title: "Orders",
-      links: [
-        { name: "All Orders", href: "/orders" },
-        { name: "Shipments", href: "/shipments" },
-        { name: "Order Partners", href: "/order-partners" },
-        { name: "Fulfillment Settings", href: "/fulfillment-settings" },
+
       ],
     },
     {
       key: "invoices",
       title: "Invoices",
       links: [
-        { name: "Overview", href: "/invoices" },
-        { name: "Projects", href: "/projects" },
-        { name: "Invoices", href: "/invoices-list" },
-        { name: "Recurring Series", href: "/recurring-series" },
+        { name: "Invoices", href: "/invoices" },
+        { name: "Approvals", href: "/approvals" },
         { name: "Estimates", href: "/estimates" },
         { name: "Reports", href: "/reports" },
         { name: "Apps", href: "/apps" },
-      ],
-    },
-    {
-      key: "sales",
-      title: "Sales Summary",
-      links: [
-        { name: "Item Sales", href: "/item-sales" },
-        { name: "Sales Trends", href: "/sales-trends" },
-        { name: "Category Sales", href: "/category-sales" },
-        { name: "Gift Cards", href: "/gift-cards-sales" },
-        { name: "Inventory Sell-through Rates", href: "/inventory-sell-through" },
       ],
     },
   ];
