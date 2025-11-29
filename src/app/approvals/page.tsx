@@ -6,6 +6,7 @@ import Sidebar from "@/components/sidebar";
 import { format } from "date-fns"; // ← This line fixes the error
 import { parseISO } from "date-fns/parseISO";
 import { generateInvoicePdf } from "@/lib/generateInvoicePdf";
+import { Payload, ItemRow } from "@/types/estimate";
 // At the top of app/estimates/page.tsx
 type Estimate = {
   id: number;
@@ -27,6 +28,11 @@ type Estimate = {
     rate: number;
   }>;
   tax?: number;
+  companyName?: string;
+  companyAddr1?: string;
+  phone?: string;
+  email?: string;
+  website?: string;
 };
 
 export default function EstimatesPage() {
@@ -89,67 +95,85 @@ async function createInvoice(estimate: Estimate) {
     return;
   }
 
-  if (!confirm(`Create invoice from ${estimate.estimateNo}?`)) return;
+  const confirmed = confirm(`Create invoice from ${estimate.estimateNo}?`);
+  if (!confirmed) return;
 
   try {
-    // 1. Fetch full estimate with items (fallback to estimate data if backend fails)
-    let fullEstimate: any = { items: [], billTo: "", shipTo: "" };
-    try {
-      const res = await fetch(`http://localhost:4000/api/estimates/${estimate.id}`);
-      if (res.ok) fullEstimate = await res.json();
-    } catch (err) {
-      console.warn("Could not fetch full estimate, using minimal data");
-    }
+    // 1️⃣ Fetch full saved estimate including items
+    const res = await fetch(`http://localhost:4000/api/estimates/${estimate.id}`);
+    if (!res.ok) throw new Error("Failed to fetch estimate");
 
-    // 2. Extract items from PDF or use estimate data
-    const items = fullEstimate.items?.length > 0
-      ? fullEstimate.items
-      : [
-          // Fallback: create dummy items from total (you can improve this later)
-          { sku: "ITEM", description: "From Estimate #" + estimate.estimateNo, qty: 1, rate: estimate.total || 80, amount: estimate.total || 80 }
-        ];
+    const fullEstimate: Estimate & { items?: ItemRow[] } = await res.json();
 
-    // 3. Build invoice data
-    const invoiceNo = `25100${Date.now().toString().slice(-5)}`;
+    // 2️⃣ Map items for invoice and calculate amount
+    const invoiceItems = (fullEstimate.items && fullEstimate.items.length > 0)
+      ? fullEstimate.items.map((item) => {
+          const qty = Number(item.qty) || 0;
+          const rate = Number(item.rate) || 0;
+          return {
+            item: item.item || item.sku || "ITEM",
+            description: item.description || item.item || item.sku || "Item",
+            qty,
+            rate,
+            amount: qty * rate,
+          };
+        })
+      : [{
+          item: `From Estimate #${estimate.estimateNo}`,
+          description: `From Estimate #${estimate.estimateNo}`,
+          qty: 1,
+          rate: Number(estimate.total) || 0,
+          amount: Number(estimate.total) || 0,
+        }];
+
+    // 3️⃣ Calculate subtotal and total from items
+    const subtotal = invoiceItems.reduce((acc, i) => acc + i.amount, 0);
+    const discount = Number(fullEstimate.discount) || 0;
+    const tax = Number(fullEstimate.tax) || 0;
+    const total = subtotal - discount + tax;
+
+    // 4️⃣ Generate invoice number & date
+    const invoiceNo = estimate.estimateNo.replace("EST", "INV");
     const today = new Date().toISOString().slice(0, 10);
-    const time = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-
-    const invoiceData = {
+    const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    // 5️⃣ Build invoice payload
+    const invoiceData: Payload = {
       invoiceNo,
       date: today,
-      time,
-      salesman: "LILIAN",
-      billTo: fullEstimate.billTo || estimate.customer || "1903 80th Street\nBrooklyn\nNew York 11214",
-      shipTo: fullEstimate.shipTo || fullEstimate.billTo || estimate.customer || "1903 80th Street\nBrooklyn\nNew York 11214",
-      items: items.map((item: any) => ({
-        sku: item.sku || item.item || "N/A",
-        description: item.description || item.item || "Service/Item",
-        qty: Number(item.qty) || 1,
-        rate: Number(item.rate) || 0,
-        amount: (Number(item.qty) || 1) * (Number(item.rate) || 0),
-      })),
-      subtotal: estimate.total || 80,
-      tax: 0, // You can calculate tax later
-      total: estimate.total || 80,
+      time: time,
+      companyName: fullEstimate.companyName || "",
+      companyAddr1: fullEstimate.companyAddr1 || "",
+      phone: fullEstimate.phone || "",
+      email: fullEstimate.email || "",
+      website: fullEstimate.website || "",
+      billTo: fullEstimate.billTo || fullEstimate.customer || "",
+      shipTo: fullEstimate.shipTo || fullEstimate.billTo || fullEstimate.customer || "",
+      items: invoiceItems,
+      subtotal,
+      discount,
+      tax,
+      total,
     };
 
-    // 4. Generate Brooklyn One invoice PDF
+    // 6️⃣ Generate PDF
     await generateInvoicePdf(invoiceData);
 
     alert(`Invoice ${invoiceNo} created successfully!`);
 
-    // 5. Optional: mark as invoiced
-    fetch(`http://localhost:4000/api/estimates/${estimate.id}/invoiced`, { method: "PATCH" })
-      .catch(() => {});
+    // 7️⃣ Mark estimate as invoiced
+    await fetch(`http://localhost:4000/api/estimates/${estimate.id}/invoiced`, { method: "PATCH" });
 
-    // Refresh list
+    // 8️⃣ Refresh estimates
     fetchEstimates();
-
   } catch (err) {
     console.error("Invoice creation failed:", err);
-    alert("Invoice created locally! (Could not connect to server)");
+    alert("Failed to generate invoice.");
   }
 }
+
+
+
+
 
   if (loading) return <div className="p-8 text-lg">Loading estimates...</div>;
 

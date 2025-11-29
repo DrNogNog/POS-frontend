@@ -1,30 +1,9 @@
-// lib/generateInvoicePdf.ts
 "use client";
 
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
+import { Payload } from "@/types/estimate";
 
-type InvoiceItem = {
-  sku: string;
-  description: string;
-  qty: number;
-  rate: number;
-  amount: number;
-};
-
-type InvoiceData = {
-  invoiceNo: string;
-  date: string;
-  time: string;
-  salesman: string;
-  billTo: string;
-  shipTo: string;
-  items: InvoiceItem[];
-  subtotal: number;
-  tax?: number;
-  total: number;
-};
-
-export async function generateInvoicePdf(data: InvoiceData) {
+export async function generateInvoicePdf(data: Payload) {
   const doc = await PDFDocument.create();
   const page = doc.addPage([612, 792]);
   const font = await doc.embedFont(StandardFonts.Helvetica);
@@ -35,7 +14,7 @@ export async function generateInvoicePdf(data: InvoiceData) {
   let y = height - margin;
 
   // === COMPANY HEADER ===
-  page.drawText("BROOKLYN ONE BUILDING SUPPLY INC", {
+  page.drawText("CREATIVE HOME DECOR", {
     x: margin,
     y,
     size: 24,
@@ -44,7 +23,7 @@ export async function generateInvoicePdf(data: InvoiceData) {
   });
   y -= 28;
 
-  page.drawText("Address: 1458 65TH STREET BROOKLYN NY 11219", {
+  page.drawText("Address: 1831 UTICA AVE, BROOKLYN, NY 11234", {
     x: margin,
     y,
     size: 11,
@@ -52,7 +31,7 @@ export async function generateInvoicePdf(data: InvoiceData) {
     color: rgb(0, 0, 0),
   });
   y -= 16;
-  page.drawText("Tel: 718-837-8222/8111   Fax: 718-837-8833", {
+  page.drawText("Tel: 347-628-1812   Fax: 347-628-1812", {
     x: margin,
     y,
     size: 11,
@@ -60,10 +39,10 @@ export async function generateInvoicePdf(data: InvoiceData) {
     color: rgb(0, 0, 0),
   });
 
-  // === INVOICE # — MOVED UP & TO THE RIGHT (NO OVERLAP) ===
+  // === INVOICE # ===
   page.drawText(`INVOICE#: ${data.invoiceNo}`, {
     x: width - margin - 210,
-    y: height - margin - 50,  // ← Moved higher
+    y: height - margin - 50,
     size: 16,
     font: bold,
     color: rgb(0, 0, 0),
@@ -74,7 +53,6 @@ export async function generateInvoicePdf(data: InvoiceData) {
   const boxWidth = (width - 3 * margin) / 2;
   const boxHeight = 90;
 
-  // Bill To
   page.drawRectangle({
     x: margin,
     y: y - boxHeight,
@@ -84,9 +62,8 @@ export async function generateInvoicePdf(data: InvoiceData) {
     borderColor: rgb(0, 0, 0),
   });
   page.drawText("Bill To:", { x: margin + 12, y: y - 20, size: 13, font: bold, color: rgb(0, 0, 0) });
-  drawLines(page, data.billTo, margin + 12, y - 45, font);
+  drawLines(page, data.billTo || "", margin + 12, y - 45, font);
 
-  // Ship To
   page.drawRectangle({
     x: margin + boxWidth + margin,
     y: y - boxHeight,
@@ -96,7 +73,7 @@ export async function generateInvoicePdf(data: InvoiceData) {
     borderColor: rgb(0, 0, 0),
   });
   page.drawText("Ship To:", { x: margin + boxWidth + margin + 12, y: y - 20, size: 13, font: bold, color: rgb(0, 0, 0) });
-  drawLines(page, data.shipTo || data.billTo, margin + boxWidth + margin + 12, y - 45, font);
+  drawLines(page, data.shipTo || data.billTo || "", margin + boxWidth + margin + 12, y - 45, font);
 
   // === TABLE ===
   y -= boxHeight + 40;
@@ -122,17 +99,24 @@ export async function generateInvoicePdf(data: InvoiceData) {
   y = tableTop - 65;
 
   // Items
+  let calculatedSubtotal = 0;
   for (const item of data.items) {
     x = margin;
-    page.drawText(item.sku || "N/A", { x: x + 12, y, size: 11, font, color: rgb(0, 0, 0) });
+    const qty = typeof item.qty === "number" ? item.qty : 1;
+    const rate = typeof item.rate === "number" ? item.rate : 0;
+    const amount = qty * rate;
+    calculatedSubtotal += amount;
+
+    page.drawText(item.item || "N/A", { x: x + 12, y, size: 11, font, color: rgb(0, 0, 0) });
     x += colWidths[0];
     page.drawText(item.description, { x: x + 12, y, size: 11, font, color: rgb(0, 0, 0) });
     x += colWidths[1];
-    page.drawText(item.qty.toString(), { x: x + 25, y, size: 11, font, color: rgb(0, 0, 0) });
+    page.drawText(qty.toString(), { x: x + 25, y, size: 11, font, color: rgb(0, 0, 0) });
     x += colWidths[2];
-    page.drawText(`$${item.rate.toFixed(2)}`, { x: x + 12, y, size: 11, font, color: rgb(0, 0, 0) });
+    page.drawText(`$${rate.toFixed(2)}`, { x: x + 12, y, size: 11, font, color: rgb(0, 0, 0) });
     x += colWidths[3];
-    page.drawText(`$${item.amount.toFixed(2)}`, { x: x + 12, y, size: 11, font, color: rgb(0, 0, 0) });
+    page.drawText(`$${amount.toFixed(2)}`, { x: x + 12, y, size: 11, font, color: rgb(0, 0, 0) });
+
     y -= 30;
   }
 
@@ -143,11 +127,11 @@ export async function generateInvoicePdf(data: InvoiceData) {
     color: rgb(0, 0, 0),
   });
 
-  // === FOOTER INFO ===
+  // === FOOTER ===
   y -= 60;
   page.drawText(`DATE: ${data.date}`, { x: margin, y, size: 12, font: bold, color: rgb(0, 0, 0) });
   y -= 24;
-  page.drawText(`SALESMAN: ${data.salesman || "LILIAN"}`, { x: margin, y, size: 12, font, color: rgb(0, 0, 0) });
+  page.drawText(`SALESMAN: ${data.salesman || "LIVIA"}`, { x: margin, y, size: 12, font, color: rgb(0, 0, 0) });
   y -= 24;
   page.drawText(`TIME: ${data.time}`, { x: margin, y, size: 12, font, color: rgb(0, 0, 0) });
 
@@ -159,35 +143,45 @@ export async function generateInvoicePdf(data: InvoiceData) {
     color: rgb(0.8, 0, 0),
   });
 
-  // === TOTALS BOX — NOW PERFECTLY INSIDE ===
-  const totalBoxX = width - margin - 220;
-  const totalBoxY = y - 180;
-  const boxWidthTotal = 200;
-  const boxHeightTotal = 120;
+ // === TOTALS BOX ===
+const totalBoxWidth = 200;
+const totalBoxHeight = 80;
+const totalBoxX = width - margin - totalBoxWidth;
+const totalBoxY = 10; // fixed Y, near bottom of page
 
-  page.drawRectangle({
-    x: totalBoxX,
-    y: totalBoxY,
-    width: boxWidthTotal,
-    height: boxHeightTotal,
-    borderWidth: 2.5,
-    borderColor: rgb(0, 0, 0),
-  });
+page.drawRectangle({
+  x: totalBoxX,
+  y: totalBoxY,
+  width: totalBoxWidth,
+  height: totalBoxHeight,
+  borderWidth: 2,
+  borderColor: rgb(0, 0, 0),
+});
 
-  let ty = totalBoxY + 85;
-  page.drawText("Subtotal", { x: totalBoxX + 20, y: ty, size: 13, font, color: rgb(0, 0, 0) });
-  page.drawText(`$${data.subtotal.toFixed(2)}`, { x: totalBoxX + 100, y: ty, size: 13, font, color: rgb(0, 0, 0) });
+let ty = totalBoxY + totalBoxHeight - 20;
 
-  ty -= 35;
-  page.drawText("Tax", { x: totalBoxX + 20, y: ty, size: 13, font, color: rgb(0, 0, 0) });
-  page.drawText(`$${data.tax?.toFixed(2) || "124.11"}`, { x: totalBoxX + 100, y: ty, size: 13, font, color: rgb(0, 0, 0) });
+// Use the subtotal you already calculated in the items loop
+const nySalesTaxRate = 0.08875; // 8.875%
+calculatedSubtotal = calculatedSubtotal - data.discount;
+const calculatedTax = +(calculatedSubtotal * nySalesTaxRate).toFixed(2);
+const discount = Number(data.discount);
 
-  ty -= 40;
-  page.drawText("TOTAL", { x: totalBoxX + 20, y: ty, size: 16, font: bold, color: rgb(0, 0, 0) });
-  page.drawText(`$${data.total.toFixed(2)}`, { x: totalBoxX + 100, y: ty, size: 18, font: bold, color: rgb(0, 0, 0) });
+const calculatedTotal = calculatedSubtotal+calculatedTax;
 
+
+page.drawText("Subtotal", { x: totalBoxX + 10, y: ty, size: 13, font, color: rgb(0, 0, 0) });
+page.drawText(`$${calculatedSubtotal.toFixed(2)}`, { x: totalBoxX + 120, y: ty, size: 13, font, color: rgb(0, 0, 0) });
+
+ty -= 25;
+page.drawText("Tax", { x: totalBoxX + 10, y: ty, size: 13, font, color: rgb(0, 0, 0) });
+page.drawText(`$${calculatedTax.toFixed(2)}`, { x: totalBoxX + 120, y: ty, size: 13, font, color: rgb(0, 0, 0) });
+
+ty -= 30;
+page.drawText("TOTAL", { x: totalBoxX + 10, y: ty, size: 16, font: bold, color: rgb(0, 0, 0) });
+page.drawText(`$${calculatedTotal.toFixed(2)}`, { x: totalBoxX + 120, y: ty, size: 18, font: bold, color: rgb(0, 0, 0) });
+
+  // === SAVE PDF ===
   const pdfBytes = await doc.save();
-
   const blob = new Blob([new Uint8Array(pdfBytes)], { type: "application/pdf" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
@@ -198,7 +192,7 @@ export async function generateInvoicePdf(data: InvoiceData) {
 }
 
 function drawLines(page: any, text: string, x: number, yStart: number, font: any) {
-  const lines = text.split("\n").filter(Boolean);
+  const lines = (text || "").split("\n").filter(Boolean);
   let y = yStart;
   for (const line of lines) {
     page.drawText(line.trim(), { x, y, size: 11, font, color: rgb(0, 0, 0) });

@@ -30,7 +30,7 @@ export default function Sidebar() {
       key: "invoices",
       title: "Invoices",
       links: [
-        { name: "Invoices", href: "/invoices" },
+        { name: "Estimates", href: "/estimates" },
         { name: "Approvals", href: "/approvals" },
         { name: "Estimates", href: "/estimates" },
         { name: "Reports", href: "/reports" },

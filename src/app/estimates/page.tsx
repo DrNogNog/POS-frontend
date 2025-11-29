@@ -61,33 +61,54 @@ export default function InvoicesPage() {
 
   // CLEAN VERSION — ONLY GENERATES PDF + SAVES TO DB
   async function handleGeneratePdf() {
-    const payload = {
-      companyName,
-      companyAddr1,
-      companyAddr2,
-      phone,
-      fax,
-      email,
-      website,
-      date,
-      estimateNo: estimateNo || "", // backend will auto-generate EST-1001, etc.
-      billTo,
-      shipTo,
-      items,
-      discountPercent: discountPercent === "" ? 0 : Number(discountPercent),
-      subtotal,
-      discount,
-      total,
-    };
+  const payload = {
+    companyName,
+    companyAddr1,
+    companyAddr2,
+    phone,
+    fax,
+    email,
+    website,
+    date,
+    estimateNo: estimateNo || "",
+    billTo,
+    shipTo,
+    items,
+    discountPercent: discountPercent === "" ? 0 : Number(discountPercent),
+    subtotal,
+    discount,
+    total,
+  };
 
-    try {
-      await generateEstimatePdf(payload);
-      alert("Estimate PDF generated and saved successfully!");
-    } catch (err) {
-      console.error("Failed to generate/save estimate:", err);
-      alert("PDF downloaded, but failed to save to database.");
-    }
+  try {
+    // 1️⃣ Generate PDF bytes (Blob)
+    const pdfBlob = await generateEstimatePdf(payload, true); // optional flag to return Blob
+
+    // 2️⃣ Convert to base64
+    const reader = new FileReader();
+    reader.readAsDataURL(pdfBlob);
+    reader.onloadend = async () => {
+      const base64Pdf = (reader.result as string).split(",")[1];
+
+      // 3️⃣ POST full estimate with items to backend
+      const res = await fetch("http://localhost:4000/api/estimates/save", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...payload, pdfData: base64Pdf }),
+      });
+
+      if (res.ok) {
+        alert("Estimate saved and PDF generated!");
+      } else {
+        console.error(await res.text());
+        alert("PDF generated, but failed to save estimate.");
+      }
+    };
+  } catch (err) {
+    console.error(err);
+    alert("Failed to generate PDF or save estimate.");
   }
+}
 
   return (
     <div className="flex min-h-screen">
