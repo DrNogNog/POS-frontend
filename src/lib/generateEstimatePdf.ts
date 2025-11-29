@@ -109,10 +109,10 @@ export async function generateEstimatePdf(
   }
 
   // TOTALS BOX
-  const totalBoxX = width - margin - 200;
-  const totalBoxY = y - 80;
-  const totalBoxWidth = 180;
-  const totalBoxHeight = data.discount > 0 ? 100 : 80;
+  const totalBoxWidth = 200;
+  const totalBoxHeight = 80;
+  const totalBoxX = width - margin - totalBoxWidth;
+  const totalBoxY = 10; // fixed Y, near bottom of page
 
   page.drawRectangle({ x: totalBoxX, y: totalBoxY, width: totalBoxWidth, height: totalBoxHeight, borderColor: rgb(0, 0, 0), borderWidth: 1.5 });
   let ty = totalBoxY + totalBoxHeight - 30;
@@ -155,7 +155,7 @@ export async function generateEstimatePdf(
         subtotal: data.subtotal,
         discount: data.discount,
         total: data.total,
-        customer: data.companyName || data.billTo?.split("\n")[0] || "Customer",
+        customer: data.billTo?.split("\n")[0],
         pdfData: btoa(String.fromCharCode(...pdfBytes)),
         items: data.items
       }) // ✅ Closing JSON.stringify
