@@ -67,62 +67,80 @@ export default function ProductsPage() {
   };
 
   const deleteProduct = async (id: string) => {
-    try {
-      await fetch(`http://localhost:4000/api/products/${id}`, { method: "DELETE" });
-      setProducts((prev) => prev.filter((p) => p.id !== id));
-    } catch (err) {
-      console.error(err);
-    }
-  };
+  try {
+    await fetch(`http://localhost:4000/api/products/${id}`, { method: "DELETE" });
+    setProducts((prev) => prev.filter((p) => p.id !== id));
+
+  } catch (err) {
+    console.error(err);
+  }
+};
+
 
   const duplicateProduct = async (product: Product) => {
-    try {
-      const formData = new FormData();
-      formData.append("name", product.name + " (Copy)");
-      formData.append("price", product.price.toString());
-      if (product.sku) formData.append("sku", product.sku);
-      if (product.description) formData.append("description", product.description);
-      if (product.categories) formData.append("categories", product.categories);
-      if (product.stock !== undefined) formData.append("stock", product.stock.toString());
-      if (product.vendors) formData.append("vendors", product.vendors.join(","));
-      if (product.images) product.images.forEach((img) => formData.append("images", img as any));
+  try {
+    const formData = new FormData();
+    formData.append("name", product.name + " (Copy)");
+    formData.append("price", product.price.toString());
+    if (product.sku) formData.append("sku", product.sku);
+    if (product.description) formData.append("description", product.description);
+    if (product.categories) formData.append("categories", product.categories);
+    if (product.stock !== undefined) formData.append("stock", product.stock.toString());
+    if (product.vendors) formData.append("vendors", product.vendors.join(","));
+    if (product.images) product.images.forEach((img) => formData.append("images", img as any));
 
-      const res = await fetch("http://localhost:4000/api/products", { method: "POST", body: formData });
-      if (!res.ok) throw new Error("Failed to duplicate product");
-      const newProduct: Product = await res.json();
-      newProduct.id = String(newProduct.id);
-      setProducts((prev) => [...prev, newProduct]);
-    } catch (err) {
-      console.error(err);
-    }
-  };
+    const res = await fetch("http://localhost:4000/api/products", { method: "POST", body: formData });
+    if (!res.ok) throw new Error("Failed to duplicate product");
+    const newProduct: Product = await res.json();
+    newProduct.id = String(newProduct.id);
+    setProducts((prev) => [...prev, newProduct]);
+
+
+  } catch (err) {
+    console.error(err);
+  }
+};
+
 
   const editProduct = async (updatedProduct: Product) => {
-    try {
-      const formData = new FormData();
-      formData.append("name", updatedProduct.name);
-      formData.append("price", updatedProduct.price.toString());
-      if (updatedProduct.sku) formData.append("sku", updatedProduct.sku);
-      if (updatedProduct.description) formData.append("description", updatedProduct.description || "");
-      if (updatedProduct.categories) formData.append("categories", updatedProduct.categories);
-      if (updatedProduct.stock !== undefined) formData.append("stock", updatedProduct.stock.toString());
-      if (updatedProduct.vendors) formData.append("vendors", updatedProduct.vendors.join(","));
-      if (updatedProduct.images) updatedProduct.images.forEach((img) => formData.append("images", img as any));
+  try {
+    const formData = new FormData();
+    formData.append("name", updatedProduct.name);
+    formData.append("price", updatedProduct.price.toString());
+    if (updatedProduct.sku) formData.append("sku", updatedProduct.sku);
+    if (updatedProduct.description) formData.append("description", updatedProduct.description || "");
+    if (updatedProduct.categories) formData.append("categories", updatedProduct.categories);
+    if (updatedProduct.stock !== undefined) formData.append("stock", updatedProduct.stock.toString());
+    if (updatedProduct.vendors) formData.append("vendors", updatedProduct.vendors.join(","));
+    if (updatedProduct.images) updatedProduct.images.forEach((img) => formData.append("images", img as any));
 
-      const res = await fetch(`http://localhost:4000/api/products/${updatedProduct.id}`, {
-        method: "PUT",
-        body: formData,
+    const res = await fetch(`http://localhost:4000/api/products/${updatedProduct.id}`, {
+      method: "PUT",
+      body: formData,
+    });
+
+    if (!res.ok) throw new Error("Failed to update product");
+    const savedProduct: Product = await res.json();
+    savedProduct.id = String(savedProduct.id);
+
+    // Find differences for logging
+    const oldProduct = products.find((p) => p.id === savedProduct.id);
+    const changes: Partial<Product> = {};
+    if (oldProduct) {
+      Object.keys(savedProduct).forEach((key) => {
+        const k = key as keyof Product;
+        if (oldProduct[k] !== savedProduct[k]) changes[k] = savedProduct[k];
       });
-
-      if (!res.ok) throw new Error("Failed to update product");
-      const savedProduct: Product = await res.json();
-      savedProduct.id = String(savedProduct.id);
-      updateProductInState(savedProduct);
-    } catch (err) {
-      console.error(err);
-      alert("Failed to save changes to the product.");
     }
-  };
+
+    updateProductInState(savedProduct);
+
+  } catch (err) {
+    console.error(err);
+    alert("Failed to save changes to the product.");
+  }
+};
+
 
   const orderMore = (id: string) => console.log("Order more", id);
   const setNonTaxable = (id: string) => console.log("Set non-taxable", id);
@@ -146,49 +164,43 @@ export default function ProductsPage() {
   };
 
   const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => e.preventDefault();
-  const openFileDialog = () => fileInputRef.current?.click();
 
   const createProduct = async () => {
-    if (!newName.trim() || !newPrice.trim()) return alert("Name and Price are required.");
+  if (!newName.trim() || !newPrice.trim()) return alert("Name and Price are required.");
 
-    const formData = new FormData();
-    formData.append("name", newName.trim());
-    formData.append("price", newPrice.trim());
-    if (newSku.trim()) formData.append("sku", newSku.trim());
-    if (newDescription.trim()) formData.append("description", newDescription.trim());
-    if (newCategories.trim()) formData.append("categories", newCategories.trim());
-    if (newStock.trim()) formData.append("stock", newStock.trim());
-    if (newVendors.length > 0) formData.append("vendors", newVendors.join(","));
-    images.forEach((img) => formData.append("images", img));
+  const formData = new FormData();
+  formData.append("name", newName.trim());
+  formData.append("price", newPrice.trim());
+  if (newSku.trim()) formData.append("sku", newSku.trim());
+  if (newDescription.trim()) formData.append("description", newDescription.trim());
+  if (newCategories.trim()) formData.append("categories", newCategories.trim());
+  if (newStock.trim()) formData.append("stock", newStock.trim());
+  if (newVendors.length > 0) formData.append("vendors", newVendors.join(","));
+  images.forEach((img) => formData.append("images", img));
 
-    try {
-      const res = await fetch("http://localhost:4000/api/products", { method: "POST", body: formData });
-      if (!res.ok) throw new Error("Failed to create product");
-      const newProduct: Product = await res.json();
-      newProduct.id = String(newProduct.id);
-      setProducts((prev) => [...prev, newProduct]);
+  try {
+    const res = await fetch("http://localhost:4000/api/products", { method: "POST", body: formData });
+    if (!res.ok) throw new Error("Failed to create product");
+    const newProduct: Product = await res.json();
+    newProduct.id = String(newProduct.id);
+    setProducts((prev) => [...prev, newProduct]);
 
-      setNewName("");
-      setNewPrice("");
-      setNewSku("");
-      setNewDescription("");
-      setNewCategories("");
-      setNewStock("0");
-      setNewVendors([]);
-      setImages([]);
-      modalClose();
-    } catch (err) {
-      console.error(err);
-    }
-  };
+    // Reset form
+    setNewName("");
+    setNewPrice("");
+    setNewSku("");
+    setNewDescription("");
+    setNewCategories("");
+    setNewStock("0");
+    setNewVendors([]);
+    setImages([]);
+    modalClose();
+  } catch (err) {
+    console.error(err);
+  }
+};
 
-  const toggleOpen = (id: string) => {
-    setOpenIds((prev) => {
-      const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
-      return next;
-    });
-  };
+
 
   return (
     <div className="flex min-h-screen bg-zinc-100 dark:bg-black">
