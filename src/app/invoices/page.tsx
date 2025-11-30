@@ -63,8 +63,8 @@ export default function InvoicesPage() {
       const byteKeys = Object.keys(data.pdf).map(Number).sort((a, b) => a - b);
       const byteArray = new Uint8Array(byteKeys.length);
       byteKeys.forEach((k, i) => {
-        byteArray[i] = data.pdf[k];
-      });
+        byteArray[i] = data.pdf![k]; // ! tells TS "I know it's defined"
+        });
 
       const blob = new Blob([byteArray], { type: "application/pdf" });
       const url = URL.createObjectURL(blob);

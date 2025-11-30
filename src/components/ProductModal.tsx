@@ -6,19 +6,14 @@ interface ProductModalProps {
   isOpen: boolean;
   close: () => void;
   createProduct: () => void;
-
   newName: string;
-  setNewName: (v: string) => void;
-
+  setNewName: React.Dispatch<React.SetStateAction<string>>;
   newPrice: string;
-  setNewPrice: (v: string) => void;
-
+  setNewPrice: React.Dispatch<React.SetStateAction<string>>;
   newSku: string;
-  setNewSku: (v: string) => void;
-
+  setNewSku: React.Dispatch<React.SetStateAction<string>>;
   newDescription: string;
-  setNewDescription: (v: string) => void;
-
+  setNewDescription: React.Dispatch<React.SetStateAction<string>>;
   images: File[];
   setImages: React.Dispatch<React.SetStateAction<File[]>>;
   handleFiles: (files: FileList | null) => void;

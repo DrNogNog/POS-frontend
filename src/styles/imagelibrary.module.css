@@ -1,0 +1,75 @@
+/* imagelibrary.module.css */
+
+.startedx {
+  background: #070514;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100%;
+  width: 100%;
+}
+
+.containerx {
+  height: auto;
+  width: 1100px;
+  background: rgba(255, 255, 255, 0.2);
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  border-radius: 20px;
+  display: flex;
+  justify-content: center;
+  flex-direction: column;
+  padding: 30px 0;
+}
+
+.row {
+  gap: 20px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.hellox {
+  width: 300px;
+  height: 200px;
+  margin: 10px auto;
+  border-radius: 10px;
+  box-shadow: 0 0 10px #070514;
+  border: 10px solid rgba(255, 255, 255, 0.2);
+  transform: scale(0.95);
+  cursor: pointer;
+  transition: 0.5s;
+  object-fit: cover;
+}
+
+.hellox:hover {
+  transform: scale(1);
+}
+
+.PopDiv {
+  background: rgba(0, 0, 0, 0.6);
+  height: 100%;
+  width: 100%;
+  position: fixed;
+  top: 0;
+  backdrop-filter: blur(2px);
+  display: none;
+  z-index: 9999;
+}
+
+.PopDivActive {
+  display: grid;
+  justify-content: center;
+  align-items: center;
+}
+
+.PopDivActive img {
+  height: 400px;
+  width: 500px;
+  box-shadow: 0 0 10px #070514;
+  border-radius: 10px;
+  border: 10px solid rgba(255, 255, 255, 0.2);
+}
+
+.PopDivActive img:hover {
+  transform: none;
+}

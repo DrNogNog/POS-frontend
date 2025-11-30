@@ -14,14 +14,9 @@ export default function Sidebar() {
       title: "Items & Services",
       links: [
         { name: "Item Library", href: "/products" },
-        { name: "Image Library", href: "/image-library" },
-        { name: "Categories", href: "/categories" },
-        { name: "Stock Overview", href: "/stock-overview" },
+        { name: "Image Library", href: "/image-library" }, // categories, stock, stock counts, vendors
         { name: "History", href: "/history" },
-        { name: "Stock Counts", href: "/stock-counts" },
-        { name: "Purchase Orders", href: "/purchase-orders" },
-        { name: "Vendors", href: "/vendors" },
-        { name: "Pending Restocks", href: "/pending-restocks" },
+        { name: "Purchase Orders", href: "/purchase-orders" }, // pending restocks
       ],
     },
     {
@@ -32,7 +27,6 @@ export default function Sidebar() {
         { name: "Approvals", href: "/approvals" },
         { name: "Invoices", href: "/invoices" },
         { name: "Reports", href: "/reports" },
-        { name: "Apps", href: "/apps" },
       ],
     },
   ];

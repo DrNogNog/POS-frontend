@@ -1,4 +1,3 @@
-// app/invoices/page.tsx
 "use client";
 
 import { useState } from "react";
@@ -18,12 +17,10 @@ export default function InvoicesPage() {
   const [companyAddr2, setCompanyAddr2] = useState("");
   const [phone, setPhone] = useState("");
   const [fax, setFax] = useState("");
-
   const [email, setEmail] = useState("");
   const [website, setWebsite] = useState("");
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [estimateNo, setEstimateNo] = useState("");
-
   const [billTo, setBillTo] = useState("");
   const [shipTo, setShipTo] = useState("");
 
@@ -59,56 +56,59 @@ export default function InvoicesPage() {
 
   const { subtotal, discount, total } = calculateTotals();
 
-  // CLEAN VERSION — ONLY GENERATES PDF + SAVES TO DB
   async function handleGeneratePdf() {
-  const payload = {
-    companyName,
-    companyAddr1,
-    companyAddr2,
-    phone,
-    fax,
-    email,
-    website,
-    date,
-    estimateNo: estimateNo || "",
-    billTo,
-    shipTo,
-    items,
-    discountPercent: discountPercent === "" ? 0 : Number(discountPercent),
-    subtotal,
-    discount,
-    total,
-  };
+    // Generate unique invoice number
+    const invoiceNo = `INV-${String(Date.now()).slice(-6)}`;
 
-  try {
-    // 1️⃣ Generate PDF bytes (Blob)
-    const pdfBlob = await generateEstimatePdf(payload, true); // optional flag to return Blob
-
-    // 2️⃣ Convert to base64
-    const reader = new FileReader();
-    reader.readAsDataURL(pdfBlob);
-    reader.onloadend = async () => {
-      const base64Pdf = (reader.result as string).split(",")[1];
-
-      // 3️⃣ POST full estimate with items to backend
-      const res = await fetch("http://localhost:4000/api/estimates/save", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...payload, pdfData: base64Pdf }),
-      });
-
-      if (res.ok) {
-        alert("Estimate saved and PDF generated!");
-      } else {
-        console.error(await res.text());
-        alert("PDF generated, but failed to save estimate.");
-      }
+    const payload = {
+      companyName,
+      companyAddr1,
+      companyAddr2,
+      phone,
+      fax,
+      email,
+      website,
+      date,
+      estimateNo: estimateNo || "",
+      invoiceNo, // ✅ required property
+      billTo,
+      shipTo,
+      items,
+      discountPercent: discountPercent === "" ? 0 : Number(discountPercent),
+      subtotal,
+      discount,
+      total,
     };
-  } catch (err) {
-    console.error(err);
-    alert("Failed to generate PDF or save estimate.");
+
+    try {
+      // 1️⃣ Generate PDF bytes (Blob)
+      const pdfBlob = (await generateEstimatePdf(payload, true)) as Blob;
+
+      // 2️⃣ Convert to base64
+      const reader = new FileReader();
+      reader.readAsDataURL(pdfBlob);
+      reader.onloadend = async () => {
+        const base64Pdf = (reader.result as string).split(",")[1];
+
+        // 3️⃣ POST full estimate with items to backend
+        const res = await fetch("http://localhost:4000/api/estimates/save", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...payload, pdfData: base64Pdf }),
+        });
+
+        if (res.ok) {
+          alert(`Estimate saved and PDF generated! Invoice #${invoiceNo}`);
+        } else {
+          console.error(await res.text());
+          alert("PDF generated, but failed to save estimate.");
+        }
+      };
+    } catch (err) {
+      console.error(err);
+      alert("Failed to generate PDF or save estimate.");
+    }
   }
-}
 
   return (
     <div className="flex min-h-screen">
@@ -117,7 +117,7 @@ export default function InvoicesPage() {
       <main className="flex-1 p-6 bg-gray-50">
         <h1 className="text-2xl font-semibold mb-4">Create Estimate</h1>
 
-        {/* === HEADER === */}
+        {/* HEADER */}
         <section className="bg-white p-4 rounded shadow mb-6">
           <h2 className="font-medium mb-2">Header</h2>
           <div className="grid grid-cols-2 gap-4">
@@ -144,7 +144,7 @@ export default function InvoicesPage() {
           </div>
         </section>
 
-        {/* === BILL TO / SHIP TO === */}
+        {/* BILL TO / SHIP TO */}
         <section className="bg-white p-4 rounded shadow mb-6 grid grid-cols-2 gap-4">
           <div>
             <label className="block text-sm">Bill To</label>
@@ -156,7 +156,7 @@ export default function InvoicesPage() {
           </div>
         </section>
 
-        {/* === ITEMS TABLE === */}
+        {/* ITEMS TABLE */}
         <section className="bg-white p-4 rounded shadow mb-6">
           <h3 className="font-medium mb-2">Items (10 rows)</h3>
           <div className="overflow-x-auto">
@@ -196,7 +196,7 @@ export default function InvoicesPage() {
           </div>
         </section>
 
-        {/* === TOTALS === */}
+        {/* TOTALS */}
         <section className="bg-white p-4 rounded shadow mb-6 max-w-md">
           <div className="flex gap-2 items-center mb-2">
             <label className="w-32">Discount %</label>
@@ -223,7 +223,7 @@ export default function InvoicesPage() {
           </div>
         </section>
 
-        {/* === GENERATE BUTTON === */}
+        {/* GENERATE BUTTON */}
         <div className="flex gap-2">
           <button
             onClick={handleGeneratePdf}

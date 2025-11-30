@@ -2,9 +2,10 @@
 
 import { useState, useEffect } from "react";
 import Sidebar from "@/components/sidebar";
-import { format, parseISO } from "date-fns";
+import { format } from "date-fns";
 import { generateInvoicePdf } from "@/lib/generateInvoicePdf";
 import { Payload, ItemRow } from "@/types/estimate";
+import { parseISO } from "date-fns/parseISO";
 
 type Estimate = {
   id: number;
@@ -96,24 +97,24 @@ export default function EstimatesPage() {
     const full: Estimate = await res.json();
 
     // Prepare invoice items
-    const invoiceItems =
-      full.items?.length > 0
-        ? full.items.map((item) => ({
-            item: item.item,
-            description: item.description || item.item,
-            qty: Number(item.qty) || 0,
-            rate: Number(item.rate) || 0,
-            amount: (Number(item.qty) || 0) * (Number(item.rate) || 0),
-          }))
-        : [
-            {
-              item: `From Estimate #${estimate.estimateNo}`,
-              description: `From Estimate #${estimate.estimateNo}`,
-              qty: 1,
-              rate: Number(estimate.total) || 0,
-              amount: Number(estimate.total) || 0,
-            },
-          ];
+    const invoiceItems = (full.items && full.items.length > 0
+      ? full.items
+      : undefined
+    )?.map((item) => ({
+      item: item.item,
+      description: item.description || item.item,
+      qty: Number(item.qty) || 0,
+      rate: Number(item.rate) || 0,
+      amount: (Number(item.qty) || 0) * (Number(item.rate) || 0),
+    })) ?? [
+      {
+        item: `From Estimate #${estimate.estimateNo}`,
+        description: `From Estimate #${estimate.estimateNo}`,
+        qty: 1,
+        rate: Number(estimate.total) || 0,
+        amount: Number(estimate.total) || 0,
+      },
+    ];
 
     const subtotal = invoiceItems.reduce((acc, i) => acc + i.amount, 0);
     const discount = Number(full.discount) || 0;
