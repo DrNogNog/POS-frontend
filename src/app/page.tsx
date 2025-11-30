@@ -23,12 +23,7 @@ export default function HomePage() {
             >
               View Products
             </Link>
-            <Link
-              href="/register"
-              className="w-full rounded-lg border p-3 text-center hover:bg-zinc-100 dark:text-white dark:border-zinc-700 dark:hover:bg-zinc-800"
-            >
-              Cashier Register
-            </Link>
+            
           </div>
         </div>
       </main>

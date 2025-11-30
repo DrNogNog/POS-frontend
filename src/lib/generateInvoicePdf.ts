@@ -189,6 +189,7 @@ page.drawText(`$${calculatedTotal.toFixed(2)}`, { x: totalBoxX + 120, y: ty, siz
   a.download = `invoice-${data.invoiceNo}.pdf`;
   a.click();
   URL.revokeObjectURL(url);
+  return pdfBytes; // <–– return the bytes
 }
 
 function drawLines(page: any, text: string, x: number, yStart: number, font: any) {
