@@ -8,7 +8,7 @@ export type Payload = {
   estimateNo?: string;
   billTo?: string;
   shipTo?: string;
-  items: { item: string; qty: number | ""; description: string; rate: number | "" }[];
+  items: { sku: string; qty: number | ""; description: string; rate: number | "" }[];
   subtotal: number;
   discount: number;
   total: number;
@@ -22,4 +22,24 @@ export type ItemRow = {
   qty: number | "";
   description: string;
   rate: number | "";
+  productId?: number | null;
+};
+
+export type BillingPayload = {
+  companyName?: string;
+  companyAddr1?: string; 
+  phone?: string;
+  email?: string;
+  website?: string;
+  date?: string;
+  estimateNo?: string;
+  billTo?: string;
+  shipTo?: string;
+  items: { item: string; qty: number | ""; description: string; rate: number | "" }[];
+  subtotal: number;
+  total: number;
+  invoiceNo: string;
+  salesman?: string; // ← Add this line
+  time?: string;    // ← Add this line
+  tax?: number;
 };

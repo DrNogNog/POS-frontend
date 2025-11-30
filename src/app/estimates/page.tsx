@@ -5,7 +5,7 @@ import Sidebar from "@/components/sidebar";
 import { generateEstimatePdf } from "@/lib/generateEstimatePdf";
 
 type ItemRow = {
-  item: string;
+  sku: string;
   qty: number | "";
   description: string;
   rate: number | "";
@@ -27,7 +27,7 @@ export default function InvoicesPage() {
   // fixed 10 rows
   const [items, setItems] = useState<ItemRow[]>(
     Array.from({ length: 10 }).map(() => ({
-      item: "",
+      sku: "",
       qty: "",
       description: "",
       rate: "",
@@ -176,7 +176,7 @@ export default function InvoicesPage() {
                   return (
                     <tr key={i}>
                       <td className="border px-2">
-                        <input className="w-full" value={r.item} onChange={(e) => updateRow(i, "item", e.target.value)} />
+                        <input className="w-full" value={r.sku} onChange={(e) => updateRow(i, "sku", e.target.value)} />
                       </td>
                       <td className="border px-2">
                         <input className="w-full" value={r.qty} onChange={(e) => updateRow(i, "qty", e.target.value === "" ? "" : Number(e.target.value))} />

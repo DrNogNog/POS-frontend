@@ -1,14 +1,14 @@
 "use client";
 
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
-import { Payload } from "@/types/estimate";
+import { BillingPayload } from "@/types/estimate";
 
 function formatCurrency(n: number): string {
   return `$${n.toFixed(2)}`;
 }
 
-export async function generateEstimatePdf(
-  data: Payload,
+export async function generateBillingPdf(
+  data: BillingPayload,
   returnBlob = false
 ): Promise<Blob | void> {
   const doc = await PDFDocument.create();
@@ -37,8 +37,8 @@ export async function generateEstimatePdf(
   page.drawText("Web Site", { x: centerX - 80, y: y - 20, size: 11, font });
   page.drawText(data.website || "", { x: centerX - 30, y: y - 20, size: 11, font, color: rgb(0, 0.3, 0.8) });
 
-  // ESTIMATE TITLE + BOX (Top Right)
-  page.drawText("Estimate", { x: width - margin - 120, y: height - margin, size: 20, font: bold });
+  // Billing TITLE + BOX (Top Right)
+  page.drawText("Billing", { x: width - margin - 120, y: height - margin, size: 20, font: bold });
   const boxX = width - margin - 180;
   const boxY = height - margin - 70;
   page.drawRectangle({ x: boxX, y: boxY, width: 160, height: 50, borderColor: rgb(0, 0, 0), borderWidth: 1 });
@@ -46,8 +46,8 @@ export async function generateEstimatePdf(
   page.drawText("Date", { x: boxX + 10, y: boxY + 30, size: 11, font });
   page.drawText(data.date || new Date().toISOString().slice(0, 10), { x: boxX + 90, y: boxY + 30, size: 11, font });
 
-  page.drawText("Estimate #", { x: boxX + 10, y: boxY + 8, size: 11, font });
-  page.drawText(data.estimateNo || "1", { x: boxX + 90, y: boxY + 8, size: 11, font });
+  page.drawText("Billing #", { x: boxX + 10, y: boxY + 8, size: 11, font });
+  page.drawText(data.BillingNo || "1", { x: boxX + 90, y: boxY + 8, size: 11, font });
 
   // BILL TO & SHIP TO BOXES
   y = height - margin - 120;
@@ -90,13 +90,13 @@ export async function generateEstimatePdf(
 
   y = tableTop - 50;
   for (const item of data.items) {
-    if (!item.sku && !item.qty && !item.rate) continue;
+    if (!item.item && !item.qty && !item.rate) continue;
     const qty = Number(item.qty) || 0;
     const rate = Number(item.rate) || 0;
     const amount = qty * rate;
 
     x = margin;
-    page.drawText(item.sku || "", { x: x + 5, y, size: 10, font });
+    page.drawText(item.item || "", { x: x + 5, y, size: 10, font });
     x += colWidths[0];
     page.drawText(qty > 0 ? qty.toString() : "", { x: x + 5, y, size: 10, font });
     x += colWidths[1];
@@ -119,11 +119,7 @@ export async function generateEstimatePdf(
   page.drawText("Subtotal", { x: totalBoxX + 15, y: ty, size: 12, font });
   page.drawText(formatCurrency(data.subtotal), { x: totalBoxX + totalBoxWidth - 100, y: ty, size: 12, font });
   ty -= 28;
-  if (data.discount > 0) {
-    page.drawText("Discount", { x: totalBoxX + 15, y: ty, size: 12, font });
-    page.drawText(`-${formatCurrency(data.discount)}`, { x: totalBoxX + totalBoxWidth - 100, y: ty, size: 12, font });
-    ty -= 28;
-  }
+
   page.drawText("Total", { x: totalBoxX + 15, y: ty, size: 14, font: bold });
   page.drawText(formatCurrency(data.total), { x: totalBoxX + totalBoxWidth - 110, y: ty, size: 14, font: bold });
 
@@ -138,28 +134,8 @@ export async function generateEstimatePdf(
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `estimate-${data.estimateNo || "draft"}.pdf`;
+  a.download = `Billing-${data.BillingNo || "draft"}.pdf`;
   a.click();
   URL.revokeObjectURL(url);
 
-  // Save to backend including items
-  try {
-    await fetch("http://localhost:4000/api/estimates/save", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        estimateNo: data.estimateNo?.trim() || null,
-        date: data.date,
-        billTo: data.billTo,
-        shipTo: data.shipTo,
-        subtotal: data.subtotal,
-        discount: data.discount,
-        total: data.total,
-        customer: data.billTo?.split("\n")[0],
-        pdfData: btoa(String.fromCharCode(...pdfBytes)),
-        items: data.items
-      }) // ✅ Closing JSON.stringify
-    }); // ✅ Closing fetch options
-} catch (err) {
-  console.error("Save failed:", err);
-}}
+}

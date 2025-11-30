@@ -107,7 +107,7 @@ export async function generateInvoicePdf(data: Payload) {
     const amount = qty * rate;
     calculatedSubtotal += amount;
 
-    page.drawText(item.item || "N/A", { x: x + 12, y, size: 11, font, color: rgb(0, 0, 0) });
+    page.drawText(item.sku || "N/A", { x: x + 12, y, size: 11, font, color: rgb(0, 0, 0) });
     x += colWidths[0];
     page.drawText(item.description, { x: x + 12, y, size: 11, font, color: rgb(0, 0, 0) });
     x += colWidths[1];

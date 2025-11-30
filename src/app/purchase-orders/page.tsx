@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import Sidebar from "@/components/sidebar";
 import { api } from "@/lib/api";
+import { useRouter } from "next/navigation";
 
 interface Order {
   id: number;
@@ -12,17 +13,33 @@ interface Order {
   vendors?: string | null;
   count: number;
   createdAt: string;
+  invoiceNo?: string | null; // optional if used to link BillingPDF
+}
+
+interface BillingPDF {
+  orderId: number;
+  invoiceNo: string;
 }
 
 export default function PurchaseOrdersPage() {
   const [orders, setOrders] = useState<Order[]>([]);
+  const [pdfMap, setPdfMap] = useState<Record<number, string>>({});
   const [loading, setLoading] = useState(true);
+  const router = useRouter();
 
   const loadOrders = async () => {
     try {
-      const res = await api("/orders"); // make sure your backend route returns all orders
-      const data: Order[] = Array.isArray(res) ? res : [];
-      setOrders(data);
+      const ordersRes: Order[] = await api("/orders");
+
+      // Load Billing PDFs
+      const pdfRes: BillingPDF[] = await api("/billing"); // returns all PDFs with orderId
+      const pdfLookup: Record<number, string> = {};
+      pdfRes.forEach((pdf) => {
+        if (pdf.orderId) pdfLookup[pdf.orderId] = pdf.invoiceNo;
+      });
+
+      setOrders(ordersRes);
+      setPdfMap(pdfLookup);
     } catch (err) {
       console.error(err);
       setOrders([]);
@@ -39,7 +56,9 @@ export default function PurchaseOrdersPage() {
     <div className="flex min-h-screen bg-zinc-100 dark:bg-black">
       <Sidebar />
       <main className="flex-1 p-10">
-        <h1 className="text-3xl font-bold mb-8 text-black dark:text-white">Purchase Orders</h1>
+        <h1 className="text-3xl font-bold mb-8 text-black dark:text-white">
+          Purchase Orders
+        </h1>
 
         {loading ? (
           <div className="text-center text-white">Loading...</div>
@@ -57,20 +76,60 @@ export default function PurchaseOrdersPage() {
                   <th className="px-6 py-4 text-left">Vendors</th>
                   <th className="px-6 py-4 text-right">Order Count</th>
                   <th className="px-6 py-4 text-left">Created At</th>
+                  <th className="px-6 py-4 text-left">Billing</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-200 dark:divide-zinc-700">
-                {orders.map((order) => (
-                  <tr key={order.id} className="hover:bg-zinc-100 dark:hover:bg-zinc-800">
-                    <td className="px-6 py-4">{order.id}</td>
-                    <td className="px-6 py-4">{order.productId}</td>
-                    <td className="px-6 py-4">{order.name}</td>
-                    <td className="px-6 py-4">{order.description || "-"}</td>
-                    <td className="px-6 py-4">{order.vendors || "-"}</td>
-                    <td className="px-6 py-4 text-right">{order.count}</td>
-                    <td className="px-6 py-4">{new Date(order.createdAt).toLocaleString()}</td>
-                  </tr>
-                ))}
+                {orders.map((order) => {
+                  const pdfInvoiceNo = pdfMap[order.id];
+
+                  return (
+                    <tr
+                      key={order.id}
+                      className="hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                    >
+                      <td className="px-6 py-4">{order.id}</td>
+                      <td className="px-6 py-4">{order.productId}</td>
+                      <td className="px-6 py-4">{order.name}</td>
+                      <td className="px-6 py-4">{order.description || "-"}</td>
+                      <td className="px-6 py-4">{order.vendors || "-"}</td>
+                      <td className="px-6 py-4 text-right">{order.count}</td>
+                      <td className="px-6 py-4">
+                        {new Date(order.createdAt).toLocaleString()}
+                      </td>
+
+                      {/* Billing Button */}
+                      <td className="px-6 py-4 space-x-2">
+                        {pdfInvoiceNo ? (
+                          <button
+                             onClick={() =>
+   window.open(
+  `http://localhost:4000/api/billing/view?invoiceNo=${pdfInvoiceNo}`,
+  "_blank"
+)
+  }
+                            className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
+                          >
+                            View PDF
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() =>
+                              router.push(
+                                `/billing?orderId=${order.id}&vendors=${encodeURIComponent(
+                                  order.vendors || ""
+                                )}`
+                              )
+                            }
+                            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                          >
+                            Billing Form
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
