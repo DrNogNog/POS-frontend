@@ -8,18 +8,17 @@ export interface Variant {
   sku: string;
   price: number;
 }
-
 export interface Product {
   id: string;
   name: string;
-  sku?: string | null;
+  sku?: string;
   price: number;
-  description?: string | null;
+  description?: string;
   categories?: string;
-  stock?: number;
-  stockCounts?: number;
   vendors?: string[];
-  variants?: Variant[];
+  stock?: number;
+  images?: string[]; // <-- add this line
+  variants?: Variant[]; // <-- add this line
 }
 
 interface ProductTableRowProps {
@@ -147,20 +146,6 @@ export default function ProductTableRow({
         </td>
       )}
 
-      {visibleColumns.has("Stock Counts") && (
-        <td className="px-6 py-4 text-right text-zinc-800 dark:text-zinc-200">
-          {isEditing ? (
-            <input
-              type="number"
-              value={editedProduct.stockCounts ?? 0}
-              onChange={(e) => handleChange("stockCounts", Number(e.target.value))}
-              className="border rounded px-2 py-1 w-full text-right dark:bg-zinc-700 dark:text-white"
-            />
-          ) : (
-            product.stockCounts ?? 0
-          )}
-        </td>
-      )}
 
       {visibleColumns.has("Vendors") && (
         <td className="px-6 py-4 text-zinc-700 dark:text-zinc-300">

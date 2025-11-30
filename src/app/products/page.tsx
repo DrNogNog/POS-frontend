@@ -17,11 +17,14 @@ export default function ProductsPage() {
   const [newPrice, setNewPrice] = useState("");
   const [newSku, setNewSku] = useState("");
   const [newDescription, setNewDescription] = useState("");
+  const [newCategories, setNewCategories] = useState("");
+  const [newVendors, setNewVendors] = useState<string[]>([]);
+  const [newStock, setNewStock] = useState("0");
   const [images, setImages] = useState<File[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const allColumns = ["Item", "SKU", "Price", "Categories", "Stock", "Stock Counts", "Vendors", "Actions"];
+  const allColumns = ["Item", "SKU", "Price", "Categories", "Stock", "Vendors", "Actions"];
   const [visibleColumns, setVisibleColumns] = useState<Set<string>>(new Set(allColumns));
 
   const loadProducts = async () => {
@@ -33,7 +36,6 @@ export default function ProductsPage() {
         id: String(p.id),
         price: Number(p.price || 0),
         stock: p.stock ?? 0,
-        stockCounts: p.stockCounts ?? 0,
         categories: p.categories ?? "",
         vendors: p.vendors ?? [],
       }));
@@ -82,8 +84,8 @@ export default function ProductsPage() {
       if (product.description) formData.append("description", product.description);
       if (product.categories) formData.append("categories", product.categories);
       if (product.stock !== undefined) formData.append("stock", product.stock.toString());
-      if (product.stockCounts !== undefined) formData.append("stockCounts", product.stockCounts.toString());
       if (product.vendors) formData.append("vendors", product.vendors.join(","));
+      if (product.images) product.images.forEach((img) => formData.append("images", img as any));
 
       const res = await fetch("http://localhost:4000/api/products", { method: "POST", body: formData });
       if (!res.ok) throw new Error("Failed to duplicate product");
@@ -104,8 +106,8 @@ export default function ProductsPage() {
       if (updatedProduct.description) formData.append("description", updatedProduct.description || "");
       if (updatedProduct.categories) formData.append("categories", updatedProduct.categories);
       if (updatedProduct.stock !== undefined) formData.append("stock", updatedProduct.stock.toString());
-      if (updatedProduct.stockCounts !== undefined) formData.append("stockCounts", updatedProduct.stockCounts.toString());
       if (updatedProduct.vendors) formData.append("vendors", updatedProduct.vendors.join(","));
+      if (updatedProduct.images) updatedProduct.images.forEach((img) => formData.append("images", img as any));
 
       const res = await fetch(`http://localhost:4000/api/products/${updatedProduct.id}`, {
         method: "PUT",
@@ -154,6 +156,9 @@ export default function ProductsPage() {
     formData.append("price", newPrice.trim());
     if (newSku.trim()) formData.append("sku", newSku.trim());
     if (newDescription.trim()) formData.append("description", newDescription.trim());
+    if (newCategories.trim()) formData.append("categories", newCategories.trim());
+    if (newStock.trim()) formData.append("stock", newStock.trim());
+    if (newVendors.length > 0) formData.append("vendors", newVendors.join(","));
     images.forEach((img) => formData.append("images", img));
 
     try {
@@ -167,6 +172,9 @@ export default function ProductsPage() {
       setNewPrice("");
       setNewSku("");
       setNewDescription("");
+      setNewCategories("");
+      setNewStock("0");
+      setNewVendors([]);
       setImages([]);
       modalClose();
     } catch (err) {
@@ -219,6 +227,12 @@ export default function ProductsPage() {
               setNewSku={setNewSku}
               newDescription={newDescription}
               setNewDescription={setNewDescription}
+              newCategories={newCategories}
+              setNewCategories={setNewCategories}
+              newVendors={newVendors}
+              setNewVendors={setNewVendors}
+              newStock={newStock}
+              setNewStock={setNewStock}
               images={images}
               setImages={setImages}
               handleFiles={handleFiles}
@@ -248,7 +262,7 @@ export default function ProductsPage() {
                           <th
                             key={col}
                             className={`px-6 py-4 ${
-                              col === "Price" || col.includes("Stock") ? "text-right" : "text-left"
+                              col === "Price" || col === "Stock" ? "text-right" : "text-left"
                             }`}
                           >
                             {col}

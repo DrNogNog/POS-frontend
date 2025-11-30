@@ -1,4 +1,5 @@
-import { useRef } from "react";
+import { useRef, useState } from "react";
+
 // --------------------
 // Modal Component
 // --------------------
@@ -10,10 +11,16 @@ interface ProductModalProps {
   setNewName: React.Dispatch<React.SetStateAction<string>>;
   newPrice: string;
   setNewPrice: React.Dispatch<React.SetStateAction<string>>;
-  newSku: string;
-  setNewSku: React.Dispatch<React.SetStateAction<string>>;
-  newDescription: string;
-  setNewDescription: React.Dispatch<React.SetStateAction<string>>;
+  newSku?: string;
+  setNewSku?: React.Dispatch<React.SetStateAction<string>>;
+  newDescription?: string;
+  setNewDescription?: React.Dispatch<React.SetStateAction<string>>;
+  newCategories?: string;
+  setNewCategories?: React.Dispatch<React.SetStateAction<string>>;
+  newVendors?: string[];
+  setNewVendors?: React.Dispatch<React.SetStateAction<string[]>>;
+  newStock?: string;
+  setNewStock?: React.Dispatch<React.SetStateAction<string>>;
   images: File[];
   setImages: React.Dispatch<React.SetStateAction<File[]>>;
   handleFiles: (files: FileList | null) => void;
@@ -29,10 +36,16 @@ export default function ProductModal({
   setNewName,
   newPrice,
   setNewPrice,
-  newSku,
-  setNewSku,
-  newDescription,
-  setNewDescription,
+  newSku = "",
+  setNewSku = () => {},
+  newDescription = "",
+  setNewDescription = () => {},
+  newCategories = "",
+  setNewCategories = () => {},
+  newVendors = [],
+  setNewVendors = () => {},
+  newStock = "0",
+  setNewStock = () => {},
   images,
   setImages,
   handleFiles,
@@ -67,21 +80,40 @@ export default function ProductModal({
             value={newPrice}
             onChange={(e) => setNewPrice(e.target.value)}
           />
-          <textarea
+          <input
+            type="text"
             placeholder="SKU"
-            rows={1}
             className="border p-3 rounded w-full col-span-1 md:col-span-2"
             value={newSku}
             onChange={(e) => setNewSku(e.target.value)}
-            />
-
-            <textarea
+          />
+          <textarea
             placeholder="Description"
             className="border p-3 rounded w-full col-span-1 md:col-span-2 h-20"
             value={newDescription}
             onChange={(e) => setNewDescription(e.target.value)}
-            />
-
+          />
+          <input
+            type="text"
+            placeholder="Categories"
+            className="border p-3 rounded w-full col-span-1 md:col-span-2"
+            value={newCategories}
+            onChange={(e) => setNewCategories(e.target.value)}
+          />
+          <input
+            type="text"
+            placeholder="Vendors (comma separated)"
+            className="border p-3 rounded w-full col-span-1 md:col-span-2"
+            value={newVendors.join(",")}
+            onChange={(e) => setNewVendors(e.target.value.split(",").map(v => v.trim()))}
+          />
+          <input
+            type="number"
+            placeholder="Stock"
+            className="border p-3 rounded w-full"
+            value={newStock}
+            onChange={(e) => setNewStock(e.target.value)}
+          />
 
           {/* Image uploader */}
           <div
@@ -97,7 +129,7 @@ export default function ProductModal({
               type="file"
               multiple
               accept="image/*"
-              ref={fileInputRef} // ✅ attach ref
+              ref={fileInputRef}
               className="hidden"
               onChange={(e) => handleFiles(e.target.files)}
             />
@@ -115,15 +147,6 @@ export default function ProductModal({
               ))}
             </div>
           )}
-        </div>
-
-        <div className="space-y-4">
-          <h1 className="text-xl font-semibold">Taxes</h1>
-          <h1 className="text-xl font-semibold">Manage Inventory</h1>
-          <h1 className="text-xl font-semibold">Variations</h1>
-          <h1 className="text-xl font-semibold">Modifiers</h1>
-          <h1 className="text-xl font-semibold">Bundle</h1>
-          <h1 className="text-xl font-semibold">Customer Attributes</h1>
         </div>
 
         <div className="flex justify-end gap-3 mt-6">

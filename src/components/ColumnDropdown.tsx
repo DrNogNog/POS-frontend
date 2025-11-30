@@ -1,47 +1,48 @@
+"use client";
+
 import { useState } from "react";
-import { ChevronDown } from "lucide-react";
 
 interface ColumnDropdownProps {
   options: string[];
   selected: Set<string>;
-  setSelected: (s: Set<string>) => void;
+  setSelected: (cols: Set<string>) => void;
 }
 
-export default function ColumnDropdown({
-  options,
-  selected,
-  setSelected,
-}: ColumnDropdownProps) {
-  const [open, setOpen] = useState(false);
+export default function ColumnDropdown({ options, selected, setSelected }: ColumnDropdownProps) {
+  const [isOpen, setIsOpen] = useState(false);
 
-  const toggle = (name: string) => {
-    const next = new Set(selected);
-    next.has(name) ? next.delete(name) : next.add(name);
-    setSelected(next);
+  const toggleColumn = (col: string) => {
+    const newSelected = new Set(selected);
+    if (newSelected.has(col)) {
+      newSelected.delete(col);
+    } else {
+      newSelected.add(col);
+    }
+    setSelected(newSelected);
   };
 
   return (
-    <div className="relative inline-block">
+    <div className="relative">
       <button
-        onClick={() => setOpen((o) => !o)}
         className="h-8 w-8 rounded-full bg-zinc-200 dark:bg-zinc-700 flex items-center justify-center hover:bg-zinc-300"
+        onClick={() => setIsOpen((prev) => !prev)}
       >
         +
       </button>
 
-      {open && (
-        <div className="absolute right-0 mt-2 w-56 bg-white dark:bg-zinc-900 shadow-xl border border-zinc-200 dark:border-zinc-700 rounded-xl p-2 max-h-80 overflow-y-auto z-50">
-          {options.map((opt) => (
+      {isOpen && (
+        <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-zinc-800 border border-gray-300 dark:border-zinc-700 rounded shadow-lg z-20">
+          {options.map((col) => (
             <label
-              key={opt}
-              className="flex items-center gap-2 px-2 py-2 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg cursor-pointer"
+              key={col}
+              className="flex items-center justify-between px-4 py-2 cursor-pointer hover:bg-gray-100 dark:hover:bg-zinc-700"
             >
+              <span className="text-gray-800 dark:text-white">{col}</span>
               <input
                 type="checkbox"
-                checked={selected.has(opt)}
-                onChange={() => toggle(opt)}
+                checked={selected.has(col)}
+                onChange={() => toggleColumn(col)}
               />
-              <span>{opt}</span>
             </label>
           ))}
         </div>
