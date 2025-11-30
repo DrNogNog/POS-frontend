@@ -8,13 +8,19 @@ import { api } from "@/lib/api";
 interface Product {
   id: number;
   name: string;
-  price: number;
+  description?: string;
   images?: string[];
 }
 
+interface ImageItem {
+  src: string;
+  name: string;
+  description?: string;
+}
+
 export default function ImageLibraryPage() {
-  const [images, setImages] = useState<string[]>([]);
-  const [popupImage, setPopupImage] = useState<string | null>(null);
+  const [images, setImages] = useState<ImageItem[]>([]);
+  const [popupImage, setPopupImage] = useState<ImageItem | null>(null);
 
   // Load images from products API
   useEffect(() => {
@@ -22,10 +28,12 @@ export default function ImageLibraryPage() {
       try {
         const data: Product[] = await api("/products");
 
-        const allImages = data.flatMap((p) =>
-          (p.images || []).map(
-            (filename) => `http://localhost:4000/uploads/${encodeURIComponent(filename)}`
-          )
+        const allImages: ImageItem[] = data.flatMap((p) =>
+          (p.images || []).map((filename) => ({
+            src: `http://localhost:4000/uploads/${encodeURIComponent(filename)}`,
+            name: p.name,
+            description: p.description,
+          }))
         );
 
         setImages(allImages);
@@ -40,7 +48,11 @@ export default function ImageLibraryPage() {
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       const target = e.target as HTMLElement;
-      if (popupImage && !target.closest(`.${styles.hellox}`) && !target.closest(`#${styles.PopDiv} img`)) {
+      if (
+        popupImage &&
+        !target.closest(`.${styles.hellox}`) &&
+        !target.closest(`#${styles.PopDiv} img`)
+      ) {
         setPopupImage(null);
       }
     };
@@ -60,14 +72,19 @@ export default function ImageLibraryPage() {
             <div className={styles.containerx}>
               {Array.from({ length: Math.ceil(images.length / 3) }).map((_, rowIdx) => (
                 <div className={styles.row} key={rowIdx}>
-                  {images.slice(rowIdx * 3, rowIdx * 3 + 3).map((src, i) => (
-                    <img
-                      key={i}
-                      className={styles.hellox}
-                      src={src}
-                      alt={`Product ${i + 1}`}
-                      onClick={() => setPopupImage(src)}
-                    />
+                  {images.slice(rowIdx * 3, rowIdx * 3 + 3).map((item, i) => (
+                    <div key={i} className="flex flex-col items-center gap-2">
+                      <img
+                        className={styles.hellox}
+                        src={item.src}
+                        alt={item.name}
+                        onClick={() => setPopupImage(item)}
+                      />
+                      <div className="text-center text-white dark:text-white">
+                        <div className="font-semibold">{item.name}</div>
+                        {item.description && <div className="text-sm">{item.description}</div>}
+                      </div>
+                    </div>
                   ))}
                 </div>
               ))}
@@ -77,7 +94,11 @@ export default function ImageLibraryPage() {
           {/* POPUP */}
           {popupImage && (
             <div className={`${styles.PopDiv} ${styles.PopDivActive}`} id={styles.PopDiv}>
-              <img src={popupImage} alt="Popup" onClick={(e) => e.stopPropagation()} />
+              <img src={popupImage.src} alt={popupImage.name} onClick={(e) => e.stopPropagation()} />
+              <div className="mt-2 text-center text-white">
+                <div className="font-bold">{popupImage.name}</div>
+                {popupImage.description && <div>{popupImage.description}</div>}
+              </div>
             </div>
           )}
         </main>
