@@ -174,6 +174,7 @@ useEffect(() => {
             ...payload,              // your PDF payload
             pdfData: base64Pdf,      // PDF data
             orderId: Number(orderId),// order ID
+            items,
             productId: currentProductId,               // product ID from query or state
             name: companyName,       // company name as the order name
             description: items.map(i => i.description).join(", "), // descriptions from items

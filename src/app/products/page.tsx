@@ -8,7 +8,16 @@ import ProductModal from "@/components/ProductModal";
 import QuickCreateProduct from "@/components/QuickCreateProduct";
 import ProductTableRow, { Product } from "@/components/ProductTableRow";
 import { useAlerts } from "@/lib/AlertsContext";
-
+interface Order {
+  id: number;
+  sku: string;
+  name: string;
+  description?: string | null;
+  vendors?: string | null;
+  count: number;
+  createdAt: string;
+  invoiceNo?: string | null;
+}
 // OrderMore modal component
 function OrderMoreModal({
   isOpen,
@@ -80,6 +89,7 @@ export default function ProductsPage() {
   const [images, setImages] = useState<File[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [orderModalProduct, setOrderModalProduct] = useState<Product | null>(null);
+  const [orders, setOrders] = useState<Order[]>([]);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -189,33 +199,48 @@ export default function ProductsPage() {
   const closeOrderModal = () => setOrderModalProduct(null);
 
   // Submit OrderMore to database
-  const handleOrderMoreSubmit = async (productId: string, count: number) => {
+ const handleOrderMoreSubmit = async (productId: string, count: number) => {
+  try {
     const product = products.find((p) => p.id === productId);
-    if (!product) return;
+    if (!product) return alert("Product not found");
 
-    try {
-      const orderData = {
-        productId: product.id,
+    // 1️⃣ Create order in backend
+    const res = await fetch("http://localhost:4000/api/orders", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        productId: product.id, // send DB id
         name: product.name,
         description: product.description,
         vendors: product.vendors,
         count,
-      };
+      }),
+    });
 
-      const res = await fetch("http://localhost:4000/api/orders", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(orderData),
-      });
+    if (!res.ok) throw new Error("Failed to record order");
+const newOrderRes = await res.json();
+    // 2️⃣ Get created order data
+    const newOrder: Order = {
+  id: newOrderRes.id,
+  sku: product.sku || "",           // get SKU from product, not backend
+  name: newOrderRes.name,
+  description: newOrderRes.description ?? null,
+  vendors: newOrderRes.vendors ?? null,
+  count: newOrderRes.count,
+  createdAt: new Date().toISOString(), // or get from backend if available
+};
 
-      if (!res.ok) throw new Error("Failed to record order");
+    // 3️⃣ Update frontend state for LIFO
+    setOrders((prev) => [newOrder, ...prev]);
 
-      alert(`Successfully added ${count} units of ${product.name} to orders database.`);
-    } catch (err) {
-      console.error(err);
-      alert("Failed to record order.");
-    }
-  };
+    alert(`Successfully added ${count} units of ${product.name} to orders.`);
+  } catch (err) {
+    console.error(err);
+    alert("Failed to record order.");
+  }
+};
+
+
 
   const setNonTaxable = (id: string) => console.log("Set non-taxable", id);
   const archiveProduct = async (id: string) => {

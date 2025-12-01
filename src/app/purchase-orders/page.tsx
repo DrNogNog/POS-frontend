@@ -7,7 +7,7 @@ import { useRouter } from "next/navigation";
 
 interface Order {
   id: number;
-  productId: string;
+  sku: string; // from Product
   name: string;
   description?: string | null;
   vendors?: string | null;
@@ -27,15 +27,24 @@ export default function PurchaseOrdersPage() {
   const [loading, setLoading] = useState(true);
   const router = useRouter();
 
+  // Load all orders and billing PDFs
   const loadOrders = async () => {
     try {
-      const ordersRes: Order[] = await api("/orders");
+      const ordersRes: Order[] = await api("/orders?includeProduct=true");
       const pdfRes: BillingPDF[] = await api("/billing");
+
+      // Build a lookup for invoice numbers
       const pdfLookup: Record<number, string> = {};
       pdfRes.forEach((pdf) => {
         if (pdf.orderId) pdfLookup[pdf.orderId] = pdf.invoiceNo;
       });
-      setOrders(ordersRes);
+
+      // Sort LIFO (newest first)
+      const sortedOrders = ordersRes.sort(
+        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      );
+
+      setOrders(sortedOrders);
       setPdfMap(pdfLookup);
     } catch (err) {
       console.error(err);
@@ -49,28 +58,36 @@ export default function PurchaseOrdersPage() {
     loadOrders();
   }, []);
 
-// 1️⃣ User clicks "New Purchase"
-const handleNewPurchaseBillingForm = async () => {
-  try {
-    const res = await fetch("http://localhost:4000/api/orders/create", {
-      method: "POST",
-    });
-    
-    if (!res.ok) throw new Error("Failed to create order");
+  // Create new purchase order and load SKU immediately
+  const handleNewPurchaseBillingForm = async () => {
+    try {
+      const res = await fetch("http://localhost:4000/api/orders/create", {
+        method: "POST",
+      });
+      if (!res.ok) throw new Error("Failed to create order");
 
-    const { orderId } = await res.json();
-    console.log("TEST:", orderId);
-    // Navigate to billing form with the new orderId
-    router.push(`/billing?orderId=${orderId}&vendors=`);
-  } catch (err) {
-    console.error(err);
-    alert("Failed to create new purchase billing form");
-  }
-  
-};
+      const { orderId } = await res.json();
 
+      // Fetch the new order including product SKU
+      const orderRes: Order = await api(`/orders/${orderId}?includeProduct=true`);
 
+      // Prepend to orders for LIFO
+      setOrders((prev) => [orderRes, ...prev]);
 
+      // Navigate to billing form with proper SKU
+      router.push(
+        `/billing?orderId=${orderId}` +
+          `&sku=${encodeURIComponent(orderRes.sku)}` +
+          `&name=${encodeURIComponent(orderRes.name)}` +
+          `&description=${encodeURIComponent(orderRes.description || "")}` +
+          `&vendors=${encodeURIComponent(orderRes.vendors || "")}` +
+          `&count=${orderRes.count}`
+      );
+    } catch (err) {
+      console.error(err);
+      alert("Failed to create new purchase billing form");
+    }
+  };
 
   return (
     <div className="flex min-h-screen bg-zinc-100 dark:bg-black">
@@ -100,7 +117,7 @@ const handleNewPurchaseBillingForm = async () => {
               <thead className="bg-zinc-50 dark:bg-zinc-800 border-b sticky top-0 z-10">
                 <tr>
                   <th className="px-6 py-4 text-left">ID</th>
-                  <th className="px-6 py-4 text-left">Product ID</th>
+                  <th className="px-6 py-4 text-left">SKU</th>
                   <th className="px-6 py-4 text-left">Name</th>
                   <th className="px-6 py-4 text-left">Description</th>
                   <th className="px-6 py-4 text-left">Vendors</th>
@@ -119,7 +136,7 @@ const handleNewPurchaseBillingForm = async () => {
                       className="hover:bg-zinc-100 dark:hover:bg-zinc-800"
                     >
                       <td className="px-6 py-4">{order.id}</td>
-                      <td className="px-6 py-4">{order.productId}</td>
+                      <td className="px-6 py-4">{order.sku}</td>
                       <td className="px-6 py-4">{order.name}</td>
                       <td className="px-6 py-4">{order.description || "-"}</td>
                       <td className="px-6 py-4">{order.vendors || "-"}</td>
@@ -144,20 +161,22 @@ const handleNewPurchaseBillingForm = async () => {
                           </button>
                         ) : (
                           <button
-                          onClick={() =>
-                            router.push(
-                              `/billing?orderId=${order.id}` +
-                                `&productId=${encodeURIComponent(order.productId)}` +
-                                `&name=${encodeURIComponent(order.name)}` +
-                                `&description=${encodeURIComponent(order.description || "")}` +
-                                `&vendors=${encodeURIComponent(order.vendors || "")}` +
-                                `&count=${order.count}`
-                            )
-                          }
-                          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-                        >
-                          Billing Form
-                        </button>
+                            onClick={() =>
+                              router.push(
+                                `/billing?orderId=${order.id}` +
+                                  `&sku=${encodeURIComponent(order.sku)}` +
+                                  `&name=${encodeURIComponent(order.name)}` +
+                                  `&description=${encodeURIComponent(
+                                    order.description || ""
+                                  )}` +
+                                  `&vendors=${encodeURIComponent(order.vendors || "")}` +
+                                  `&count=${order.count}`
+                              )
+                            }
+                            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                          >
+                            Billing Form
+                          </button>
                         )}
                       </td>
                     </tr>
