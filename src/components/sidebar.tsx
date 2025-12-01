@@ -31,6 +31,12 @@ export default function Sidebar() {
         { name: "Reports", href: "/reports" },
       ],
     },
+    { key: "Finances",
+      title: "Finances",
+      links: [
+        { name: "Accounts Payable", href: "/accounts-payable" },
+        { name: "Accounts Receivable", href: "/accounts-receivable" },
+  ],},
   ];
 
   // Auto-open the menu that contains the current route
