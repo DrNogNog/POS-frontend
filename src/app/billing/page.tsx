@@ -36,6 +36,8 @@ const count = Number(query.get("count") || 0);
   const [paymentTerms, setPaymentTerms] = useState("");
   const [supplierAddress, setSupplierAddress] = useState("");
   const [shipTo, setShipTo] = useState("");
+  const [currentProductId, setCurrentProductId] = useState(productId);
+
 
   const [items, setItems] = useState<ItemRow[]>([]);
 
@@ -76,11 +78,15 @@ useEffect(() => {
 
   // -------------------- ITEM TABLE HELPERS --------------------
   function updateRow(index: number, key: keyof ItemRow, value: any) {
-    const next = [...items];
-    next[index] = { ...next[index], [key]: value };
-    setItems(next);
-  }
+  const next = [...items];
+  next[index] = { ...next[index], [key]: value };
+  setItems(next);
 
+  // if first row's item changes, update currentProductId
+  if (index === 0 && key === "item") {
+    setCurrentProductId(value);
+  }
+}
   function calculateTotals() {
     let subtotal = 0;
     for (const r of items) {
@@ -148,6 +154,7 @@ useEffect(() => {
     items,
     subtotal,
     total,
+    productId: currentProductId,
   };
 
   try {
@@ -163,8 +170,17 @@ useEffect(() => {
       const saveRes = await fetch("http://localhost:4000/api/billing/save", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...payload, pdfData: base64Pdf, orderId: Number(orderId) }),
-      });
+        body: JSON.stringify({
+            ...payload,              // your PDF payload
+            pdfData: base64Pdf,      // PDF data
+            orderId: Number(orderId),// order ID
+            productId: currentProductId,               // product ID from query or state
+            name: companyName,       // company name as the order name
+            description: items.map(i => i.description).join(", "), // descriptions from items
+            vendors: supplierAddress, // supplier/vendors
+            count: items.reduce((sum, i) => sum + (Number(i.qty) || 0), 0), // total qty
+          }),
+    });
 
       if (!saveRes.ok) {
         alert("PDF generated, but saving failed.");
