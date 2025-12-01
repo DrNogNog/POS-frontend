@@ -17,7 +17,7 @@ export default function BillingForm() {
   const router = useRouter();
   const query = useSearchParams();
 const orderId = Number(query.get("orderId"));
-const productId = query.get("productId") || "";
+const productId = query.get("sku") || "";
 const name = query.get("name") || "";
 const description = query.get("description") || "";
 const vendors = query.get("vendors") || "";
@@ -137,6 +137,9 @@ useEffect(() => {
 
   const invoiceNo = billNo || `BILL-${String(Date.now()).slice(-6)}`;
 
+  // Grab SKU from the first row
+  const sku = items[0]?.item || "";
+
   const payload = {
     type: "BILL",
     companyName,
@@ -154,7 +157,7 @@ useEffect(() => {
     items,
     subtotal,
     total,
-    productId: currentProductId,
+    productId: sku, // ✅ use first item's SKU
   };
 
   try {
@@ -171,17 +174,17 @@ useEffect(() => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-            ...payload,              // your PDF payload
-            pdfData: base64Pdf,      // PDF data
-            orderId: Number(orderId),// order ID
-            items,
-            productId: currentProductId,               // product ID from query or state
-            name: companyName,       // company name as the order name
-            description: items.map(i => i.description).join(", "), // descriptions from items
-            vendors: supplierAddress, // supplier/vendors
-            count: items.reduce((sum, i) => sum + (Number(i.qty) || 0), 0), // total qty
-          }),
-    });
+          ...payload,
+          pdfData: base64Pdf,
+          orderId: Number(orderId),
+          items,
+          productId: sku, // ✅ keep SKU consistent
+          name: companyName,
+          description: items.map((i) => i.description).join(", "),
+          vendors: supplierAddress,
+          count: items.reduce((sum, i) => sum + (Number(i.qty) || 0), 0),
+        }),
+      });
 
       if (!saveRes.ok) {
         alert("PDF generated, but saving failed.");
@@ -194,7 +197,7 @@ useEffect(() => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           vendors: supplierAddress,
-          description: items.map(i => i.description).join(", "), // concatenate item descriptions
+          description: items.map((i) => i.description).join(", "),
         }),
       });
 
@@ -207,6 +210,7 @@ useEffect(() => {
     alert("Failed to generate bill.");
   }
 }
+
 
 
 
