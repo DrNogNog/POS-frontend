@@ -3,7 +3,8 @@
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import { BillingPayload } from "@/types/estimate";
 
-function formatCurrency(n: number): string {
+function formatCurrency(n: number | undefined): string {
+  if (n === undefined || isNaN(n)) return "$0.00";
   return `$${n.toFixed(2)}`;
 }
 
@@ -20,7 +21,7 @@ export async function generateBillingPdf(
   const margin = 50;
   let y = height - margin;
 
-  // COMPANY HEADER (Left)
+  // COMPANY HEADER
   page.drawText(data.companyName || "", { x: margin, y, size: 16, font: bold });
   y -= 20;
   page.drawText(data.companyAddr1 || "", { x: margin, y, size: 11, font });
@@ -30,14 +31,12 @@ export async function generateBillingPdf(
   // EMAIL & WEBSITE (Center)
   const centerX = width / 2 - 40;
   y = height - margin - 5;
-
   page.drawText("E-mail", { x: centerX - 80, y, size: 11, font });
   page.drawText(data.email || "", { x: centerX - 30, y, size: 11, font, color: rgb(0, 0.3, 0.8) });
-
   page.drawText("Web Site", { x: centerX - 80, y: y - 20, size: 11, font });
   page.drawText(data.website || "", { x: centerX - 30, y: y - 20, size: 11, font, color: rgb(0, 0.3, 0.8) });
 
-  // Billing TITLE + BOX (Top Right)
+  // BILLING TITLE + BOX
   page.drawText("Billing", { x: width - margin - 120, y: height - margin, size: 20, font: bold });
   const boxX = width - margin - 180;
   const boxY = height - margin - 70;
@@ -47,14 +46,14 @@ export async function generateBillingPdf(
   page.drawText(data.date || new Date().toISOString().slice(0, 10), { x: boxX + 90, y: boxY + 30, size: 11, font });
 
   page.drawText("Billing #", { x: boxX + 10, y: boxY + 8, size: 11, font });
-  page.drawText(data.BillingNo || "1", { x: boxX + 90, y: boxY + 8, size: 11, font });
+  page.drawText(data.invoiceNo || "1", { x: boxX + 90, y: boxY + 8, size: 11, font });
 
   // BILL TO & SHIP TO BOXES
   y = height - margin - 120;
   const boxWidth = (width - 3 * margin) / 2;
   const boxHeight = 90;
 
-  // Bill To Box
+  // Bill To
   page.drawRectangle({ x: margin, y: y - boxHeight, width: boxWidth, height: boxHeight, borderColor: rgb(0, 0, 0), borderWidth: 1 });
   page.drawText("Name / Address", { x: margin + 10, y: y - 18, size: 11, font: bold });
   let by = y - 38;
@@ -65,7 +64,7 @@ export async function generateBillingPdf(
     }
   }
 
-  // Ship To Box
+  // Ship To
   page.drawRectangle({ x: margin + boxWidth + margin, y: y - boxHeight, width: boxWidth, height: boxHeight, borderColor: rgb(0, 0, 0), borderWidth: 1 });
   page.drawText("Ship To", { x: margin + boxWidth + margin + 10, y: y - 18, size: 11, font: bold });
   let sy = y - 38;
@@ -80,7 +79,7 @@ export async function generateBillingPdf(
   y = y - boxHeight - 30;
   const tableTop = y;
 
-  // Header background
+  // Header
   page.drawRectangle({ x: margin, y: tableTop - 25, width: width - 2 * margin, height: 25, color: rgb(0.9, 0.9, 0.9) });
   const headers = ["Item", "Qty", "Description", "Rate", "Total"];
   const colWidths = [80, 60, 220, 80, 100];
@@ -89,10 +88,11 @@ export async function generateBillingPdf(
   page.drawLine({ start: { x: margin, y: tableTop - 25 }, end: { x: width - margin, y: tableTop - 25 }, thickness: 1 });
 
   y = tableTop - 50;
-  for (const item of data.items) {
-    if (!item.item && !item.qty && !item.rate) continue;
+  const items = Array.isArray(data.items) ? data.items : [];
+  for (const item of items) {
     const qty = Number(item.qty) || 0;
     const rate = Number(item.rate) || 0;
+    if (!item.item && qty === 0 && rate === 0) continue;
     const amount = qty * rate;
 
     x = margin;
@@ -108,34 +108,30 @@ export async function generateBillingPdf(
     y -= 20;
   }
 
-  // TOTALS BOX
+  // TOTALS
   const totalBoxWidth = 200;
   const totalBoxHeight = 80;
   const totalBoxX = width - margin - totalBoxWidth;
-  const totalBoxY = 10; // fixed Y, near bottom of page
+  const totalBoxY = 10;
 
   page.drawRectangle({ x: totalBoxX, y: totalBoxY, width: totalBoxWidth, height: totalBoxHeight, borderColor: rgb(0, 0, 0), borderWidth: 1.5 });
   let ty = totalBoxY + totalBoxHeight - 30;
   page.drawText("Subtotal", { x: totalBoxX + 15, y: ty, size: 12, font });
   page.drawText(formatCurrency(data.subtotal), { x: totalBoxX + totalBoxWidth - 100, y: ty, size: 12, font });
   ty -= 28;
-
   page.drawText("Total", { x: totalBoxX + 15, y: ty, size: 14, font: bold });
   page.drawText(formatCurrency(data.total), { x: totalBoxX + totalBoxWidth - 110, y: ty, size: 14, font: bold });
 
-  // FINALIZE PDF
+  // SAVE PDF
   const pdfBytes = await doc.save();
 
-  // Return Blob if requested
   if (returnBlob) return new Blob([new Uint8Array(pdfBytes)], { type: "application/pdf" });
 
-  // Trigger download
   const blob = new Blob([new Uint8Array(pdfBytes)], { type: "application/pdf" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `Billing-${data.BillingNo || "draft"}.pdf`;
+  a.download = `Billing-${data.invoiceNo || "draft"}.pdf`;
   a.click();
   URL.revokeObjectURL(url);
-
 }

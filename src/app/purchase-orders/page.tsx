@@ -13,7 +13,7 @@ interface Order {
   vendors?: string | null;
   count: number;
   createdAt: string;
-  invoiceNo?: string | null; // optional if used to link BillingPDF
+  invoiceNo?: string | null;
 }
 
 interface BillingPDF {
@@ -30,14 +30,11 @@ export default function PurchaseOrdersPage() {
   const loadOrders = async () => {
     try {
       const ordersRes: Order[] = await api("/orders");
-
-      // Load Billing PDFs
-      const pdfRes: BillingPDF[] = await api("/billing"); // returns all PDFs with orderId
+      const pdfRes: BillingPDF[] = await api("/billing");
       const pdfLookup: Record<number, string> = {};
       pdfRes.forEach((pdf) => {
         if (pdf.orderId) pdfLookup[pdf.orderId] = pdf.invoiceNo;
       });
-
       setOrders(ordersRes);
       setPdfMap(pdfLookup);
     } catch (err) {
@@ -52,6 +49,29 @@ export default function PurchaseOrdersPage() {
     loadOrders();
   }, []);
 
+// 1️⃣ User clicks "New Purchase"
+const handleNewPurchaseBillingForm = async () => {
+  try {
+    const res = await fetch("http://localhost:4000/api/orders/create", {
+      method: "POST",
+    });
+    
+    if (!res.ok) throw new Error("Failed to create order");
+
+    const { orderId } = await res.json();
+    console.log("TEST:", orderId);
+    // Navigate to billing form with the new orderId
+    router.push(`/billing?orderId=${orderId}&vendors=`);
+  } catch (err) {
+    console.error(err);
+    alert("Failed to create new purchase billing form");
+  }
+  
+};
+
+
+
+
   return (
     <div className="flex min-h-screen bg-zinc-100 dark:bg-black">
       <Sidebar />
@@ -59,6 +79,16 @@ export default function PurchaseOrdersPage() {
         <h1 className="text-3xl font-bold mb-8 text-black dark:text-white">
           Purchase Orders
         </h1>
+
+        {/* New Purchase Billing Form Button */}
+        <div className="mb-6">
+          <button
+            onClick={handleNewPurchaseBillingForm}
+            className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+          >
+            Purchase New Item Billing Form
+          </button>
+        </div>
 
         {loading ? (
           <div className="text-center text-white">Loading...</div>
@@ -102,29 +132,32 @@ export default function PurchaseOrdersPage() {
                       <td className="px-6 py-4 space-x-2">
                         {pdfInvoiceNo ? (
                           <button
-                             onClick={() =>
-   window.open(
-  `http://localhost:4000/api/billing/view?invoiceNo=${pdfInvoiceNo}`,
-  "_blank"
-)
-  }
+                            onClick={() =>
+                              window.open(
+                                `http://localhost:4000/api/billing/view?invoiceNo=${pdfInvoiceNo}&orderId=${order.id}`,
+                                "_blank"
+                              )
+                            }
                             className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
                           >
                             View PDF
                           </button>
                         ) : (
                           <button
-                            onClick={() =>
-                              router.push(
-                                `/billing?orderId=${order.id}&vendors=${encodeURIComponent(
-                                  order.vendors || ""
-                                )}`
-                              )
-                            }
-                            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-                          >
-                            Billing Form
-                          </button>
+                          onClick={() =>
+                            router.push(
+                              `/billing?orderId=${order.id}` +
+                                `&productId=${encodeURIComponent(order.productId)}` +
+                                `&name=${encodeURIComponent(order.name)}` +
+                                `&description=${encodeURIComponent(order.description || "")}` +
+                                `&vendors=${encodeURIComponent(order.vendors || "")}` +
+                                `&count=${order.count}`
+                            )
+                          }
+                          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                        >
+                          Billing Form
+                        </button>
                         )}
                       </td>
                     </tr>
