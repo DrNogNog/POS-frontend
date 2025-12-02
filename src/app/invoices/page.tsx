@@ -7,6 +7,7 @@ type Invoice = {
   id: number;
   invoiceNo: string;
   createdAt: string;
+  total: number;
 };
 
 export default function InvoicesPage() {
@@ -115,6 +116,7 @@ export default function InvoicesPage() {
               <tr>
                 <th className="px-6 py-4 text-left">Invoice #</th>
                 <th className="px-6 py-4 text-left">Created At</th>
+                <th className="px-6 py-4 text-left"> Total </th>
                 <th className="px-6 py-4 text-left">Actions</th>
               </tr>
             </thead>
@@ -130,6 +132,7 @@ export default function InvoicesPage() {
                   <tr key={inv.id} className="hover:bg-gray-50 transition">
                     <td className="px-6 py-4 text-indigo-600 font-medium">{inv.invoiceNo}</td>
                     <td className="px-6 py-4">{new Date(inv.createdAt).toLocaleDateString()}</td>
+                    <td className="px-6 py-4"> {inv.total} </td>
                     <td className="px-6 py-4 space-x-2">
                       <button
                         onClick={() => viewPDF(inv.id)}

@@ -185,7 +185,13 @@ export default function InvoicesPage() {
                         <input className="w-full" value={r.description} onChange={(e) => updateRow(i, "description", e.target.value)} />
                       </td>
                       <td className="border px-2">
-                        <input className="w-full" value={r.rate} onChange={(e) => updateRow(i, "rate", e.target.value === "" ? "" : Number(e.target.value))} />
+                        <input
+                          className="w-full"
+                          type="number"
+                          step="0.01"
+                          value={r.rate}
+                          onChange={(e) => updateRow(i, "rate", e.target.value)}
+                        />
                       </td>
                       <td className="border px-2 text-right">{rowTotal.toFixed(2)}</td>
                     </tr>
@@ -202,6 +208,8 @@ export default function InvoicesPage() {
             <label className="w-32">Discount %</label>
             <input
               className="border px-2 py-1 rounded flex-1"
+              type="number"
+              step="0.01"
               value={discountPercent}
               onChange={(e) => setDiscountPercent(e.target.value === "" ? "" : Number(e.target.value))}
             />

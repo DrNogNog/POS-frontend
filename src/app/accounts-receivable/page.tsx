@@ -1,125 +1,98 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Sidebar from "@/components/sidebar";
-import {
-  Search,
-  Filter,
-  Download,
-  Plus,
-  MoreVertical,
-  Calendar,
-  DollarSign,
-  AlertCircleDollarSign,
-  AlertCircle,
-  CheckCircle2,
-  Clock,
-  TrendingUp,
-} from "lucide-react";
+import { Search, DollarSign, TrendingUp, AlertCircle } from "lucide-react";
 
-interface Receivable {
+interface Invoice {
   id: string;
-  customer: string;
-  invoiceNumber: string;
-  issueDate: string;
-  dueDate: string;
-  amount: number;
+  customer?: string;
+  invoiceNo?: string;
+  total?: number;
+  overdueAmount?: number;
   paidAmount?: number;
-  status: "Paid" | "Pending" | "Overdue" | "Partially Paid" | "Draft";
+  status?: "Paid" | "Pending" | "Overdue" | "Partially Paid" | "Draft";
 }
 
-const mockReceivables: Receivable[] = [
-  {
-    id: "1",
-    customer: "Global Retail Inc.",
-    invoiceNumber: "INV-2025-1001",
-    issueDate: "2025-11-18",
-    dueDate: "2025-12-18",
-    amount: 48500.0,
-    status: "Pending",
-  },
-  {
-    id: "2",
-    customer: "TechStart Ventures",
-    invoiceNumber: "INV-2025-1002",
-    issueDate: "2025-11-10",
-    dueDate: "2025-11-25",
-    amount: 18250.75,
-    status: "Overdue",
-  },
-  {
-    id: "3",
-    customer: "Summit Logistics",
-    invoiceNumber: "INV-2025-1003",
-    issueDate: "2025-11-22",
-    dueDate: "2025-12-22",
-    amount: 8900.0,
-    status: "Paid",
-    paidAmount: 8900.0,
-  },
-  {
-    id: "4",
-    customer: "Nova Digital Agency",
-    invoiceNumber: "INV-2025-1004",
-    issueDate: "2025-11-15",
-    dueDate: "2025-12-15",
-    amount: 12500.0,
-    status: "Partially Paid",
-    paidAmount: 7500.0,
-  },
-  {
-    id: "5",
-    customer: "Horizon Manufacturing",
-    invoiceNumber: "INV-2025-1005",
-    issueDate: "2025-11-28",
-    dueDate: "2025-12-28",
-    amount: 33400.0,
-    status: "Pending",
-  },
-];
-
 export default function AccountsReceivablePage() {
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [filterStatus, setFilterStatus] = useState<string>("all");
 
+  useEffect(() => {
+    fetchInvoices();
+  }, []);
+  async function updateStatus(id: string, newStatus: Invoice["status"]) {
+  try {
+    // Optimistic UI update
+    setInvoices((prev) =>
+      prev.map((inv) =>
+        inv.id === id ? { ...inv, status: newStatus } : inv
+      )
+    );
+
+    await fetch(`http://localhost:4000/api/invoices/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: newStatus }),
+    });
+  } catch (err) {
+    console.error("Failed to update invoice status", err);
+    alert("Error updating invoice status");
+    fetchInvoices(); // restore remote version
+  }
+}
+
+  async function fetchInvoices() {
+    try {
+      const res = await fetch("http://localhost:4000/api/invoices");
+      if (!res.ok) throw new Error("Failed to fetch invoices");
+      const data: Invoice[] = await res.json();
+      setInvoices(data);
+    } catch (err) {
+      console.error(err);
+      alert("Failed to load invoices.");
+    } finally {
+      setLoading(false);
+    }
+  }
+  console.log("helllo",invoices);
   // Calculations
-  const totalReceivable = mockReceivables
-    .filter((r) => r.status !== "Paid")
-    .reduce((sum, r) => {
-      if (r.status === "Partially Paid") return sum + (r.amount - (r.paidAmount || 0));
-      return sum + r.amount;
-    }, 0);
+  const totalReceivable = invoices.reduce((sum, r) => {
+  const amount = Number(r.total) || 0;
+  const paid = Number(r.paidAmount) || 0;
 
-  const overdueAmount = mockReceivables
+  if (r.status === "Paid") return sum;
+
+  if (r.status === "Partially Paid") {
+    return sum + Math.max(amount - paid, 0);
+  }
+
+  // For Unpaid, Overdue, Draft, etc.
+  return sum + amount;
+}, 0);
+
+  const overdueAmount = invoices
     .filter((r) => r.status === "Overdue")
-    .reduce((sum, r) => sum + r.amount, 0);
+    .reduce((sum, r) => sum + (r.overdueAmount ?? 0), 0);
 
-  const paidThisMonth = mockReceivables
+  const paidThisMonth = invoices
     .filter((r) => r.status === "Paid")
-    .reduce((sum, r) => sum + (r.paidAmount || 0), 0);
+    .reduce((sum, r) => sum + (r.paidAmount ?? 0), 0);
 
-  const filtered = mockReceivables.filter((item) => {
+  const filtered = invoices.filter((item) => {
+    const customer = item.customer ?? "";
+    const status = item.status ?? "";
+
     const matchesSearch =
-      item.customer.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.invoiceNumber.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesFilter = filterStatus === "all" || item.status.toLowerCase() === filterStatus.toLowerCase();
+      customer.toLowerCase().includes(searchTerm.toLowerCase())
+
+    const matchesFilter =
+      filterStatus === "all" || status.toLowerCase() === filterStatus.toLowerCase();
+
     return matchesSearch && matchesFilter;
   });
-
-  const getStatusBadge = (status: Receivable["status"]) => {
-    const map = {
-      Paid: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300",
-      Pending: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300",
-      Overdue: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300",
-      "Partially Paid": "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-300",
-      Draft: "bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300",
-    };
-    return (
-      <span className={`px-3 py-1 rounded-full text-xs font-medium ${map[status]}`}>
-        {status}
-      </span>
-    );
-  };
 
   return (
     <div className="flex min-h-screen bg-zinc-100 dark:bg-zinc-950">
@@ -142,7 +115,7 @@ export default function AccountsReceivablePage() {
               <div>
                 <p className="text-sm text-gray-600 dark:text-gray-400">Total Receivable</p>
                 <p className="text-2xl font-bold text-gray-900 dark:text-white mt-2">
-                  ${totalReceivable.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                  ${(totalReceivable ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                 </p>
               </div>
               <div className="p-3 bg-blue-100 dark:bg-blue-900 rounded-lg">
@@ -156,7 +129,7 @@ export default function AccountsReceivablePage() {
               <div>
                 <p className="text-sm text-gray-600 dark:text-gray-400">Overdue Amount</p>
                 <p className="text-2xl font-bold text-red-600 dark:text-red-400 mt-2">
-                  ${overdueAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                  ${(overdueAmount ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                 </p>
               </div>
               <div className="p-3 bg-red-100 dark:bg-red-900 rounded-lg">
@@ -170,7 +143,7 @@ export default function AccountsReceivablePage() {
               <div>
                 <p className="text-sm text-gray-600 dark:text-gray-400">Collected This Month</p>
                 <p className="text-2xl font-bold text-green-600 dark:text-green-400 mt-2">
-                  ${paidThisMonth.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                  ${(paidThisMonth ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                 </p>
               </div>
               <div className="p-3 bg-green-100 dark:bg-green-900 rounded-lg">
@@ -184,11 +157,11 @@ export default function AccountsReceivablePage() {
               <div>
                 <p className="text-sm text-gray-600 dark:text-gray-400">Pending Invoices</p>
                 <p className="text-2xl font-bold text-gray-900 dark:text-white mt-2">
-                  {mockReceivables.filter(r => r.status === "Pending" || r.status === "Partially Paid").length}
+                  {invoices.filter(r => r.status === "Pending" || r.status === "Partially Paid").length}
                 </p>
               </div>
               <div className="p-3 bg-amber-100 dark:bg-amber-900 rounded-lg">
-                <Clock className="w-6 h-6 text-amber-600 dark:text-amber-400" />
+                <TrendingUp className="w-6 h-6 text-amber-600 dark:text-amber-400" />
               </div>
             </div>
           </div>
@@ -196,42 +169,15 @@ export default function AccountsReceivablePage() {
 
         {/* Toolbar */}
         <div className="bg-white dark:bg-zinc-900 rounded-xl shadow-sm border border-gray-200 dark:border-zinc-800 p-6 mb-6">
-          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-            <div className="relative flex-1 max-w-md">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
-              <input
-                type="text"
-                placeholder="Search customers or invoice number..."
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-zinc-700 rounded-lg bg-gray-50 dark:bg-zinc-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
-            </div>
-
-            <div className="flex gap-3">
-              <select
-                className="px-4 py-2 border border-gray-300 dark:border-zinc-700 rounded-lg bg-gray-50 dark:bg-zinc-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                value={filterStatus}
-                onChange={(e) => setFilterStatus(e.target.value)}
-              >
-                <option value="all">All Status</option>
-                <option value="paid">Paid</option>
-                <option value="pending">Pending</option>
-                <option value="overdue">Overdue</option>
-                <option value="partially paid">Partially Paid</option>
-                <option value="draft">Draft</option>
-              </select>
-
-              <button className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg flex items-center gap-2 transition">
-                <Plus className="w-4 h-4" />
-                New Invoice
-              </button>
-
-              <button className="px-4 py-2 border border-gray-300 dark:border-zinc-700 rounded-lg hover:bg-gray-50 dark:hover:bg-zinc-800 flex items-center gap-2 transition">
-                <Download className="w-4 h-4" />
-                Export
-              </button>
-            </div>
+          <div className="relative flex-1 max-w-md">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
+            <input
+              type="text"
+              placeholder="Search customers or invoice number..."
+              className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-zinc-700 rounded-lg bg-gray-50 dark:bg-zinc-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
           </div>
         </div>
 
@@ -243,10 +189,8 @@ export default function AccountsReceivablePage() {
                 <tr>
                   <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Invoice</th>
                   <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Customer</th>
-                  <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Due Date</th>
                   <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Amount</th>
                   <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Status</th>
-                  <th className="px-6 py-4 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200 dark:divide-zinc-700">
@@ -255,56 +199,46 @@ export default function AccountsReceivablePage() {
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div>
                         <div className="text-sm font-medium text-gray-900 dark:text-white">
-                          {inv.invoiceNumber}
-                        </div>
-                        <div className="text-sm text-gray-500 dark:text-gray-400">
-                          Issued {new Date(inv.issueDate).toLocaleDateString()}
+                          {inv.invoiceNo ?? "—"}
                         </div>
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
-                      {inv.customer}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center gap-2">
-                        <Calendar className="w-4 h-4 text-gray-400" />
-                        <span className={`text-sm ${inv.status === "Overdue" ? "text-red-600 font-medium dark:text-red-400" : "text-gray-900 dark:text-white"}`}>
-                          {new Date(inv.dueDate).toLocaleDateString()}
-                        </span>
-                      </div>
+                      {inv.customer ?? "—"}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
-                      ${inv.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                      ${(inv.total ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                       {inv.status === "Partially Paid" && (
                         <div className="text-xs text-amber-600 dark:text-amber-400">
-                          Received: ${inv.paidAmount?.toFixed(2)}
+                          Received: ${(inv.paidAmount ?? 0).toFixed(2)}
                         </div>
                       )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      {getStatusBadge(inv.status)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right">
-                      <button className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
-                        <MoreVertical className="w-5 h-5" />
-                      </button>
-                    </td>
+                          <select
+                            className="px-3 py-1 rounded-full text-xs font-medium cursor-pointer bg-gray-100 dark:bg-zinc-800 border border-gray-300 dark:border-zinc-700"
+                            value={inv.status ?? "Pending"}
+                            onChange={(e) => updateStatus(inv.id, e.target.value)}
+                          >
+                            <option value="Paid">Paid</option>
+                            <option value="Pending">Pending</option>
+                            <option value="Overdue">Overdue</option>
+                            <option value="Partially Paid">Partially Paid</option>
+                            <option value="Draft">Draft</option>
+                          </select>
+                        </td>
+
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
 
-          {/* Pagination */}
+          {/* Pagination placeholder */}
           <div className="px-6 py-4 border-t border-gray-200 dark:border-zinc-700 flex items-center justify-between bg-gray-50 dark:bg-zinc-800">
             <p className="text-sm text-gray-700 dark:text-gray-400">
-              Showing {filtered.length} of {mockReceivables.length} invoices
+              Showing {filtered.length} of {invoices.length} invoices
             </p>
-            <div className="flex gap-2">
-              <button className="px-4 py-1.5 border border-gray-300 dark:border-zinc-600 rounded-md text-sm hover:bg-white dark:hover:bg-zinc-700">Prev</button>
-              <button className="px-4 py-1.5 bg-blue-600 text-white rounded-md text-sm">1</button>
-              <button className="px-4 py-1.5 border border-gray-300 dark:border-zinc-600 rounded-md text-sm hover:bg-white dark:hover:bg-zinc-700">Next</button>
-            </div>
           </div>
         </div>
       </main>

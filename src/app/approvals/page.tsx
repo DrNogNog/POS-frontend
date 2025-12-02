@@ -124,13 +124,15 @@ export default function EstimatesPage() {
       console.log("Products fetched:", full.items);
       // Map estimate items to products
       const invoiceItems: InvoiceItem[] = (full.items || [])
-    .map((i: EstimateItem & { sku?: string }) => {
-      const qty = Number(i.qty);
-      if (!i.sku || !qty || qty <= 0) return null;
-      const searchKey = i.sku || i.item;
-      const product = products.find(
-      (p) => p.sku?.trim() === searchKey.trim() || p.name.trim() === searchKey.trim()
-    );
+        .map((i: EstimateItem & { sku?: string }) => {
+          const qty = Number(i.qty);
+          if (!i.sku || !qty || qty <= 0) return null;
+          const searchKey = i.sku || i.item;
+          const product = products.find(
+          (p) => p.sku?.trim() === searchKey.trim() || p.name.trim() === searchKey.trim()
+        );
+        console.log("Searching for:", searchKey, "Products:", products);
+
       if (!product) return null;
 
       if (product.stock < qty) {
@@ -150,7 +152,7 @@ export default function EstimatesPage() {
 
       console.log("Invoice items prepared:", invoiceItems);
       if (invoiceItems.length === 0) {
-        alert("No valid products in this estimate. Cannot create invoice.");
+        alert("No valid products in inventory. Cannot create invoice.");
         return;
       }
 
@@ -175,9 +177,10 @@ export default function EstimatesPage() {
       // Calculate totals
       const subtotal = invoiceItems.reduce((acc, i) => acc + i.amount, 0);
       const discount = Number(full.discount) || 0;
-      const tax = Number(full.tax) || 0;
-      const total = subtotal - discount + tax;
+      const TAX_RATE = Number(full.tax) ? Number(full.tax) / 100 : 0.08875;
 
+      const tax = (subtotal - discount) * TAX_RATE;
+      const total = (subtotal - discount) + tax;
       // Generate invoice data
       const invoiceNo = estimate.estimateNo.replace("EST", "INV");
       const today = new Date().toISOString().slice(0, 10);
@@ -195,12 +198,11 @@ export default function EstimatesPage() {
         billTo: full.billTo || "",
         shipTo: full.shipTo || "",
         items: invoiceItems,
-        subtotal,
-        discount,
-        tax,
-        total,
+        subtotal: Number(subtotal.toFixed(2)),
+        discount: Number(discount.toFixed(2)),
+        tax: Number(tax.toFixed(2)),
+        total: Number(total.toFixed(2))
       };
-
       // Generate PDF
       const pdfBytes = await generateInvoicePdf(invoiceData);
       const base64Pdf = Buffer.from(pdfBytes).toString("base64");
@@ -209,7 +211,7 @@ export default function EstimatesPage() {
       const postRes = await fetch("http://localhost:4000/api/invoices", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ invoiceNo, pdf: base64Pdf }),
+        body: JSON.stringify({ invoiceNo, total, pdf: base64Pdf }),
       });
 
       if (!postRes.ok) {

@@ -17,6 +17,7 @@ export default function Sidebar() {
         { name: "Image Library", href: "/image-library" }, // categories, stock, stock counts, vendors
         { name: "History", href: "/history" },
         { name: "Purchase Orders", href: "/purchase-orders" }, // pending restocks
+         { name: "Accounts Payable", href: "/accounts-payable" },
         { name: "Archives", href: "/archives" },
         { name: "Alerts", href: "/alerts" },
       ],
@@ -28,15 +29,11 @@ export default function Sidebar() {
         { name: "Estimates", href: "/estimates" },
         { name: "Approvals", href: "/approvals" },
         { name: "Invoices", href: "/invoices" },
+        { name: "Accounts Receivable", href: "/accounts-receivable" },
         { name: "Reports", href: "/reports" },
       ],
     },
-    { key: "Finances",
-      title: "Finances",
-      links: [
-        { name: "Accounts Payable", href: "/accounts-payable" },
-        { name: "Accounts Receivable", href: "/accounts-receivable" },
-  ],},
+    
   ];
 
   // Auto-open the menu that contains the current route
