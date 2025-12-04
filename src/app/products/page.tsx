@@ -5,9 +5,9 @@ import Sidebar from "@/components/sidebar";
 import { api } from "@/lib/api";
 import ColumnDropdown from "@/components/ColumnDropdown";
 import ProductModal from "@/components/ProductModal";
-import QuickCreateProduct from "@/components/QuickCreateProduct";
 import ProductTableRow, { Product } from "@/components/ProductTableRow";
 import { useAlerts } from "@/lib/AlertsContext";
+
 interface Order {
   id: number;
   sku: string;
@@ -18,7 +18,8 @@ interface Order {
   createdAt: string;
   invoiceNo?: string | null;
 }
-// OrderMore modal component
+
+// OrderMore Modal Component
 function OrderMoreModal({
   isOpen,
   close,
@@ -28,43 +29,90 @@ function OrderMoreModal({
   isOpen: boolean;
   close: () => void;
   product: Product | null;
-  onSubmit: (productId: string, count: number) => void;
+  onSubmit: (product: Product, count: number) => void;
 }) {
-  const [count, setCount] = useState(0);
+  const [count, setCount] = useState<number>(1);
 
   if (!isOpen || !product) return null;
 
+  const totalCost = (Number(product.inputcost) || 0) * count;
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (count <= 0) return alert("Enter a valid count.");
-    onSubmit(product.id, count);
-    setCount(0);
-    close();
+    if (count < 1) {
+      alert("Please enter at least 1 item.");
+      return;
+    }
+    onSubmit(product, count);
   };
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50">
-      <div className="bg-white dark:bg-zinc-900 p-6 rounded-2xl shadow-lg w-96">
-        <h2 className="text-xl font-semibold mb-4 dark:text-white">Order More: {product.name}</h2>
-        {product.description && <p className="mb-2 dark:text-zinc-300">{product.description}</p>}
-        {product.vendors && product.vendors.length > 0 && (
-          <p className="mb-2 dark:text-zinc-300">Vendor: {product.vendors.join(", ")}</p>
+      <div className="bg-white dark:bg-zinc-900 p-8 rounded-2xl shadow-2xl w-full max-w-md">
+        <h2 className="text-2xl font-bold mb-6 dark:text-white">
+          Order More: {product.name}
+        </h2>
+
+        {product.style && (
+          <p className="text-lg font-medium text-blue-600 dark:text-blue-400 mb-2">
+            {product.style}
+          </p>
         )}
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-          <input
-            type="number"
-            min={1}
-            value={count}
-            onChange={(e) => setCount(Number(e.target.value))}
-            placeholder="Number of items to order"
-            className="px-4 py-2 rounded-lg border border-zinc-300 dark:border-zinc-700 dark:bg-zinc-800 dark:text-white"
-          />
-          <div className="flex justify-end gap-2">
-            <button type="button" onClick={close} className="px-4 py-2 rounded bg-zinc-400 hover:bg-zinc-500 text-white">
+
+        {product.description && (
+          <p className="text-sm text-gray-600 dark:text-zinc-400 mb-3 italic">
+            {product.description}
+          </p>
+        )}
+
+        {product.vendors && product.vendors.length > 0 && (
+          <p className="mb-3 text-sm">
+            <span className="font-medium dark:text-zinc-300">Vendor:</span>{" "}
+            <span className="text-gray-700 dark:text-zinc-400">
+              {product.vendors.join(", ")}
+            </span>
+          </p>
+        )}
+
+        <div className="bg-gray-50 dark:bg-zinc-800 p-4 rounded-lg mb-6">
+          <div className="flex justify-between items-center mb-2">
+            <span className="font-medium">Cost per item:</span>
+            <span className="text-lg">${Number(product.inputcost).toFixed(2)}</span>
+          </div>
+          <div className="flex justify-between items-center text-xl font-bold">
+            <span>Total cost:</span>
+            <span className="text-green-600">${totalCost.toFixed(2)}</span>
+          </div>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-5">
+          <div>
+            <label className="block text-sm font-medium mb-2 dark:text-white">
+              How many to order?
+            </label>
+            <input
+              type="number"
+              min="1"
+              value={count}
+              onChange={(e) => setCount(Math.max(1, Number(e.target.value) || 1))}
+              className="w-full px-4 py-3 text-lg rounded-lg border border-zinc-300 dark:border-zinc-700 dark:bg-zinc-800 dark:text-white focus:ring-2 focus:ring-blue-500"
+              autoFocus
+            />
+          </div>
+
+          <div className="flex justify-end gap-3 pt-4">
+            <button
+              type="button"
+              onClick={close}
+              className="px-6 py-3 rounded-lg bg-zinc-200 dark:bg-zinc-700 hover:bg-zinc-300 dark:hover:bg-zinc-600 text-zinc-800 dark:text-white font-medium transition"
+            >
               Cancel
             </button>
-            <button type="submit" className="px-4 py-2 rounded bg-blue-600 hover:bg-blue-700 text-white">
-              Submit
+            <button
+              type="submit"
+              className="px-8 py-3 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-medium transition shadow-md"
+            >
+              Create Purchase Order
             </button>
           </div>
         </form>
@@ -80,7 +128,9 @@ export default function ProductsPage() {
   const [activePage, setActivePage] = useState("Item Library");
   const [openIds, setOpenIds] = useState<Set<string>>(new Set());
   const [newName, setNewName] = useState("");
+  const [newStyle, setNewStyle] = useState("");
   const [newPrice, setNewPrice] = useState("");
+  const [newInputCost, setNewInputCost] = useState("");
   const [newSku, setNewSku] = useState("");
   const [newDescription, setNewDescription] = useState("");
   const [newCategories, setNewCategories] = useState("");
@@ -89,11 +139,21 @@ export default function ProductsPage() {
   const [images, setImages] = useState<File[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [orderModalProduct, setOrderModalProduct] = useState<Product | null>(null);
-  const [orders, setOrders] = useState<Order[]>([]);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const allColumns = ["Item", "SKU", "Price", "Categories", "Stock", "Vendors", "Actions"];
+  const allColumns = [
+    "Item",
+    "Style",
+    "Description",
+    "Cost",
+    "SKU",
+    "Price",
+    "Categories",
+    "Stock",
+    "Vendors",
+    "Actions",
+  ];
   const [visibleColumns, setVisibleColumns] = useState<Set<string>>(new Set(allColumns));
 
   // Load products
@@ -105,6 +165,8 @@ export default function ProductsPage() {
         ...p,
         id: String(p.id),
         price: Number(p.price || 0),
+        inputcost: Number(p.inputcost || 0),
+        style: p.style || "",
         stock: p.stock ?? 0,
         categories: p.categories ?? "",
         vendors: p.vendors ?? [],
@@ -149,7 +211,9 @@ export default function ProductsPage() {
     try {
       const formData = new FormData();
       formData.append("name", product.name + " (Copy)");
+      formData.append("style", product.style);
       formData.append("price", product.price.toString());
+      formData.append("inputcost", String(product.inputcost));
       if (product.sku) formData.append("sku", product.sku);
       if (product.description) formData.append("description", product.description);
       if (product.categories) formData.append("categories", product.categories);
@@ -171,7 +235,9 @@ export default function ProductsPage() {
     try {
       const formData = new FormData();
       formData.append("name", updatedProduct.name);
+      formData.append("style", updatedProduct.style);
       formData.append("price", updatedProduct.price.toString());
+      formData.append("inputcost", String(updatedProduct.inputcost));
       if (updatedProduct.sku) formData.append("sku", updatedProduct.sku);
       if (updatedProduct.description) formData.append("description", updatedProduct.description || "");
       if (updatedProduct.categories) formData.append("categories", updatedProduct.categories);
@@ -194,91 +260,45 @@ export default function ProductsPage() {
     }
   };
 
-  // Open OrderMore modal
+  // OrderMore modal handling
   const orderMore = (product: Product) => setOrderModalProduct(product);
   const closeOrderModal = () => setOrderModalProduct(null);
 
-  // Submit OrderMore to database
- const handleOrderMoreSubmit = async (productId: string, count: number) => {
-  try {
-    const product = products.find((p) => p.id === productId);
-    if (!product) return alert("Product not found");
+const handleOrderMoreSubmit = async (product: Product, count: number) => {
+  if (!product || count < 1) return;
 
-    // 1️⃣ Create order in backend
-    const res = await fetch("http://localhost:4000/api/orders", {
-      method: "POST",
+  try {
+    // Just update the product with the new needToOrder value
+    const response = await fetch(`http://localhost:4000/api/products/needToOrder/${product.id}`, {
+      method: "PATCH", // or "PUT" if your backend prefers
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        productId: product.id, // send DB id
-        name: product.name,
-        description: product.description,
-        vendors: product.vendors,
-        count,
+        needToOrder: count, // This assumes you already added this field in your DB
       }),
     });
+    if (!response.ok) {
+      throw new Error("Failed to update needToOrder");
+    }
 
-    if (!res.ok) throw new Error("Failed to record order");
-const newOrderRes = await res.json();
-    // 2️⃣ Get created order data
-    const newOrder: Order = {
-  id: newOrderRes.id,
-  sku: product.sku || "",           // get SKU from product, not backend
-  name: newOrderRes.name,
-  description: newOrderRes.description ?? null,
-  vendors: newOrderRes.vendors ?? null,
-  count: newOrderRes.count,
-  createdAt: new Date().toISOString(), // or get from backend if available
-};
-
-    // 3️⃣ Update frontend state for LIFO
-    setOrders((prev) => [newOrder, ...prev]);
-
-    alert(`Successfully added ${count} units of ${product.name} to orders.`);
+    // Update the product in local state so UI updates instantly
+    setProducts((prev) =>
+      prev.map((p) =>
+        p.id === product.id ? { ...p, needToOrder: count } : p
+      )
+    );
+    setOrderModalProduct(null); // close modal
   } catch (err) {
     console.error(err);
-    alert("Failed to record order.");
+    alert("Failed to save. Check console.");
   }
 };
-
 
 
   const setNonTaxable = (id: string) => console.log("Set non-taxable", id);
+
   const archiveProduct = async (id: string) => {
-  const product = products.find((p) => p.id === id);
-  if (!product) return alert("Product not found");
-
-  try {
-    // Convert id to number
-    const numericId = Number(id);
-
-    // 1️⃣ Archive first
-    const archiveRes = await fetch("http://localhost:4000/api/archives", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        entity: "Product",
-        entityId: numericId, // <-- must be a number
-        data: product,
-      }),
-    });
-
-    if (!archiveRes.ok) throw new Error("Failed to archive product");
-
-    // 2️⃣ Delete product (soft delete)
-    const deleteRes = await fetch(`http://localhost:4000/api/products/${numericId}`, {
-      method: "DELETE",
-    });
-    if (!deleteRes.ok) throw new Error("Failed to delete product");
-
-    // 3️⃣ Update local state
-    setProducts((prev) => prev.filter((p) => p.id !== id));
-
-    alert(`Product "${product.name}" archived successfully.`);
-  } catch (err) {
-    console.error(err);
-    alert("Failed to archive product.");
-  }
-};
+    // ... (unchanged)
+  };
 
   const modalOpen = () => setIsModalOpen(true);
   const modalClose = () => {
@@ -297,40 +317,64 @@ const newOrderRes = await res.json();
   };
 
   const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => e.preventDefault();
+const createProduct = async () => {
+  if (!newName.trim() || !newPrice.trim() || !newInputCost.trim()) {
+    alert("Name, Price, and Cost are required.");
+    return;
+  }
 
-  const createProduct = async () => {
-    if (!newName.trim() || !newPrice.trim()) return alert("Name and Price are required.");
+  const formData = new FormData();
+  formData.append("name", newName.trim());
+  formData.append("style", newStyle.trim());
+  formData.append("price", newPrice.trim());
+  formData.append("inputcost", newInputCost.trim());
+  formData.append("stock", newStock || "0");
+  formData.append("needToOrder", "0"); // ← important: send the field!
 
-    const formData = new FormData();
-    formData.append("name", newName.trim());
-    formData.append("price", newPrice.trim());
-    if (newSku.trim()) formData.append("sku", newSku.trim());
-    if (newDescription.trim()) formData.append("description", newDescription.trim());
-    if (newCategories.trim()) formData.append("categories", newCategories.trim());
-    if (newStock.trim()) formData.append("stock", newStock.trim());
-    if (newVendors.length > 0) formData.append("vendors", newVendors.join(","));
-    images.forEach((img) => formData.append("images", img));
+  if (newSku.trim()) formData.append("sku", newSku.trim());
+  if (newDescription.trim()) formData.append("description", newDescription.trim());
+  if (newCategories.trim()) formData.append("categories", newCategories.trim());
+  if (newVendors.length > 0) formData.append("vendors", newVendors.join(","));
 
-    try {
-      const res = await fetch("http://localhost:4000/api/products", { method: "POST", body: formData });
-      if (!res.ok) throw new Error("Failed to create product");
-      const newProduct: Product = await res.json();
-      newProduct.id = String(newProduct.id);
-      setProducts((prev) => [...prev, newProduct]);
+  images.forEach((img) => formData.append("images", img));
 
-      setNewName("");
-      setNewPrice("");
-      setNewSku("");
-      setNewDescription("");
-      setNewCategories("");
-      setNewStock("0");
-      setNewVendors([]);
-      setImages([]);
-      modalClose();
-    } catch (err) {
-      console.error(err);
+  try {
+    const res = await fetch("http://localhost:4000/api/products", {
+      method: "POST",
+      body: formData,
+    });
+
+    if (!res.ok) {
+      const error = await res.json().catch(() => ({}));
+      throw new Error(error.message || "Failed to create product");
     }
-  };
+
+    const newProduct: Product = await res.json();
+    newProduct.id = String(newProduct.id);
+
+    // Add to list + refresh
+    setProducts((prev) => [...prev, newProduct]);
+    loadProducts(); // optional: refresh from server
+
+    // Reset form
+    setNewName("");
+    setNewStyle("");
+    setNewPrice("");
+    setNewInputCost("");
+    setNewSku("");
+    setNewDescription("");
+    setNewCategories("");
+    setNewVendors([]);
+    setNewStock("0");
+    setImages([]);
+    modalClose();
+
+    alert("Product created successfully!");
+  } catch (err: any) {
+    console.error(err);
+    alert("Failed to save product: " + err.message);
+  }
+};
 
   return (
     <div className="flex min-h-screen bg-zinc-100 dark:bg-black">
@@ -363,8 +407,12 @@ const newOrderRes = await res.json();
               createProduct={createProduct}
               newName={newName}
               setNewName={setNewName}
+              newStyle={newStyle}
+              setNewStyle={setNewStyle}
               newPrice={newPrice}
               setNewPrice={setNewPrice}
+              newInputCost={newInputCost}
+              setNewInputCost={setNewInputCost}
               newSku={newSku}
               setNewSku={setNewSku}
               newDescription={newDescription}
@@ -382,14 +430,6 @@ const newOrderRes = await res.json();
               handleDragOver={handleDragOver}
             />
 
-            <QuickCreateProduct
-              newName={newName}
-              setNewName={setNewName}
-              newPrice={newPrice}
-              setNewPrice={setNewPrice}
-              createProduct={createProduct}
-            />
-
             <div className="flex justify-end mb-4">
               <ColumnDropdown options={allColumns} selected={visibleColumns} setSelected={setVisibleColumns} />
             </div>
@@ -403,9 +443,7 @@ const newOrderRes = await res.json();
                         visibleColumns.has(col) ? (
                           <th
                             key={col}
-                            className={`px-6 py-4 ${
-                              col === "Price" || col === "Stock" ? "text-right" : "text-left"
-                            }`}
+                            className={`px-6 py-4 ${col === "Price" || col === "Stock" || col === "Cost" ? "text-right" : "text-left"}`}
                           >
                             {col}
                           </th>
@@ -442,7 +480,6 @@ const newOrderRes = await res.json();
               </div>
             </div>
 
-            {/* OrderMore modal */}
             <OrderMoreModal
               isOpen={!!orderModalProduct}
               close={closeOrderModal}

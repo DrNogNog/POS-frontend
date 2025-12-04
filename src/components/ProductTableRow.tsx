@@ -8,17 +8,23 @@ export interface Variant {
   sku: string;
   price: number;
 }
+
 export interface Product {
   id: string;
   name: string;
-  sku?: string;
+  style: string;
+  description?: string | null;
+  sku?: string | null;
+  inputcost: number;
   price: number;
-  description?: string;
-  categories?: string;
-  vendors?: string[];
-  stock?: number;
-  images?: string[]; // <-- add this line
-  variants?: Variant[]; // <-- add this line
+  deletedAt?: string | null;
+  images: string[];
+  stock: number;
+  vendors: string[];
+  categories: string;
+  logs?: any[];
+  orders?: any[];
+  variants?: Variant[];
 }
 
 interface ProductTableRowProps {
@@ -48,14 +54,33 @@ export default function ProductTableRow({
 }: ProductTableRowProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editedProduct, setEditedProduct] = useState<Product>({ ...product });
+  const [vendorsInput, setVendorsInput] = useState<string>(
+    editedProduct.vendors?.join(", ") ?? ""
+  );
+
+
+// When starting to edit
+  const startEditing = () => {
+  setEditedProduct({ ...product });
+  setVendorsInput(product.vendors?.join(", ") ?? "");
+  setIsEditing(true);
+};
+
+  // Update vendors array only when saving
+const saveChanges = () => {
+  const vendorsArray = vendorsInput
+    .split(",")
+    .map((v) => v.trim())
+    .filter(Boolean);
+
+  editProduct({ ...editedProduct, vendors: vendorsArray });
+  setIsEditing(false);
+};
+
+
 
   const handleChange = (field: keyof Product, value: any) => {
     setEditedProduct((prev) => ({ ...prev, [field]: value }));
-  };
-
-  const saveChanges = () => {
-    editProduct(editedProduct);
-    setIsEditing(false);
   };
 
   const cancelEdit = () => {
@@ -86,6 +111,51 @@ export default function ProductTableRow({
         </td>
       )}
 
+      {visibleColumns.has("Style") && (
+        <td className="px-6 py-4 text-zinc-700 dark:text-zinc-300">
+          {isEditing ? (
+            <input
+              type="text"
+              value={editedProduct.style}
+              onChange={(e) => handleChange("style", e.target.value)}
+              className="border rounded px-2 py-1 w-full dark:bg-zinc-700 dark:text-white"
+            />
+          ) : (
+            product.style
+          )}
+        </td>
+      )}
+
+      {visibleColumns.has("Description") && (
+        <td className="px-6 py-4 text-zinc-700 dark:text-zinc-300">
+          {isEditing ? (
+            <input
+              type="text"
+              value={editedProduct.description ?? ""}
+              onChange={(e) => handleChange("description", e.target.value)}
+              className="border rounded px-2 py-1 w-full dark:bg-zinc-700 dark:text-white"
+            />
+          ) : (
+            product.description ?? "-"
+          )}
+        </td>
+      )}
+
+      {visibleColumns.has("Cost") && (
+        <td className="px-6 py-4 text-right text-zinc-800 dark:text-zinc-200">
+          {isEditing ? (
+            <input
+              type="number"
+              value={editedProduct.inputcost}
+              onChange={(e) => handleChange("inputcost", Number(e.target.value))}
+              className="border rounded px-2 py-1 w-full text-right dark:bg-zinc-700 dark:text-white"
+            />
+          ) : (
+            `$${Number(product.inputcost).toFixed(2)}`
+          )}
+        </td>
+      )}
+
       {visibleColumns.has("SKU") && (
         <td className="px-6 py-4 text-zinc-700 dark:text-zinc-300">
           {isEditing ? (
@@ -111,7 +181,7 @@ export default function ProductTableRow({
               className="border rounded px-2 py-1 w-full text-right dark:bg-zinc-700 dark:text-white"
             />
           ) : (
-            `$${product.price}`
+            `$${product.price.toFixed(2)}`
           )}
         </td>
       )}
@@ -121,7 +191,7 @@ export default function ProductTableRow({
           {isEditing ? (
             <input
               type="text"
-              value={editedProduct.categories ?? ""}
+              value={editedProduct.categories}
               onChange={(e) => handleChange("categories", e.target.value)}
               className="border rounded px-2 py-1 w-full dark:bg-zinc-700 dark:text-white"
             />
@@ -136,33 +206,33 @@ export default function ProductTableRow({
           {isEditing ? (
             <input
               type="number"
-              value={editedProduct.stock ?? 0}
+              value={editedProduct.stock}
               onChange={(e) => handleChange("stock", Number(e.target.value))}
               className="border rounded px-2 py-1 w-full text-right dark:bg-zinc-700 dark:text-white"
             />
           ) : (
-            product.stock ?? 0
+            product.stock
           )}
         </td>
       )}
-
-
+      
       {visibleColumns.has("Vendors") && (
-        <td className="px-6 py-4 text-zinc-700 dark:text-zinc-300">
-          {isEditing ? (
-            <input
-              type="text"
-              value={editedProduct.vendors?.join(", ") ?? ""}
-              onChange={(e) =>
-                handleChange("vendors", e.target.value.split(",").map((v) => v.trim()))
-              }
-              className="border rounded px-2 py-1 w-full dark:bg-zinc-700 dark:text-white"
-            />
-          ) : (
-            product.vendors?.join(", ") ?? "-"
-          )}
-        </td>
-      )}
+  <td className="px-6 py-4 text-zinc-700 dark:text-zinc-300">
+    {isEditing ? (
+      <input
+        type="text"
+        value={vendorsInput}
+        onChange={(e) => setVendorsInput(e.target.value)} // spaces and commas allowed
+        placeholder="Vendor1, Vendor 2, Vendor 3"
+        className="border rounded px-2 py-1 w-full dark:bg-zinc-700 dark:text-white"
+      />
+    ) : (
+      product.vendors?.join(", ") ?? "-"
+    )}
+  </td>
+)}
+
+
 
       {visibleColumns.has("Actions") && (
         <td className="px-6 py-4 text-right">

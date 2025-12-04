@@ -11,7 +11,7 @@ function formatCurrency(n: number | undefined): string {
 export async function generateBillingPdf(
   data: BillingPayload,
   returnBlob = false
-): Promise<Blob | void> {
+): Promise<Blob> {
   const doc = await PDFDocument.create();
   const page = doc.addPage([612, 792]);
   const font = await doc.embedFont(StandardFonts.Helvetica);
@@ -84,7 +84,10 @@ export async function generateBillingPdf(
   const headers = ["Item", "Qty", "Description", "Rate", "Total"];
   const colWidths = [80, 60, 220, 80, 100];
   let x = margin;
-  headers.forEach((h, i) => { page.drawText(h, { x: x + 8, y: tableTop - 15, size: 11, font: bold }); x += colWidths[i]; });
+  headers.forEach((h, i) => {
+    page.drawText(h, { x: x + 8, y: tableTop - 15, size: 11, font: bold });
+    x += colWidths[i];
+  });
   page.drawLine({ start: { x: margin, y: tableTop - 25 }, end: { x: width - margin, y: tableTop - 25 }, thickness: 1 });
 
   y = tableTop - 50;
@@ -122,16 +125,21 @@ export async function generateBillingPdf(
   page.drawText("Total", { x: totalBoxX + 15, y: ty, size: 14, font: bold });
   page.drawText(formatCurrency(data.total), { x: totalBoxX + totalBoxWidth - 110, y: ty, size: 14, font: bold });
 
-  // SAVE PDF
+  // Generate PDF bytes
   const pdfBytes = await doc.save();
 
-  if (returnBlob) return new Blob([new Uint8Array(pdfBytes)], { type: "application/pdf" });
-
+  // Always return a Blob
   const blob = new Blob([new Uint8Array(pdfBytes)], { type: "application/pdf" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `Billing-${data.invoiceNo || "draft"}.pdf`;
-  a.click();
-  URL.revokeObjectURL(url);
+
+  // If not returning blob, trigger download
+  if (!returnBlob) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `Billing-${data.invoiceNo || "draft"}.pdf`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  return blob; // Always returns Blob
 }

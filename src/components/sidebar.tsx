@@ -17,6 +17,7 @@ export default function Sidebar() {
         { name: "Image Library", href: "/image-library" }, // categories, stock, stock counts, vendors
         { name: "History", href: "/history" },
         { name: "Purchase Orders", href: "/purchase-orders" }, // pending restocks
+        { name: "Billing Orders", href: "/billing-orders" },
          { name: "Accounts Payable", href: "/accounts-payable" },
         { name: "Archives", href: "/archives" },
         { name: "Alerts", href: "/alerts" },

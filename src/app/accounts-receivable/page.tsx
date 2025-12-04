@@ -218,8 +218,12 @@ export default function AccountsReceivablePage() {
                           <select
                             className="px-3 py-1 rounded-full text-xs font-medium cursor-pointer bg-gray-100 dark:bg-zinc-800 border border-gray-300 dark:border-zinc-700"
                             value={inv.status ?? "Pending"}
-                            onChange={(e) => updateStatus(inv.id, e.target.value)}
-                          >
+                            onChange={(e) =>
+                              updateStatus(
+                                inv.id,
+                                e.target.value as "Paid" | "Pending" | "Overdue" | "Partially Paid" | "Draft"
+                              )
+                            }>
                             <option value="Paid">Paid</option>
                             <option value="Pending">Pending</option>
                             <option value="Overdue">Overdue</option>
