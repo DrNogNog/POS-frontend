@@ -125,6 +125,7 @@ export default function ProductsPage() {
   const { updateLowStockAlert } = useAlerts();
   const [products, setProducts] = useState<Product[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
+  const [styleSearch, setStyleSearch] = useState(""); // <-- new: style-only search
   const [activePage, setActivePage] = useState("Item Library");
   const [openIds, setOpenIds] = useState<Set<string>>(new Set());
   const [newName, setNewName] = useState("");
@@ -182,17 +183,28 @@ export default function ProductsPage() {
     if (activePage === "Item Library") loadProducts();
   }, [activePage]);
 
+  // Filtered products now considers both the general search AND the style-only search
   const filteredProducts = useMemo(() => {
     const query = searchQuery.toLowerCase().trim();
-    if (!query) return products;
-    return products.filter(
-      (p) =>
+    const styleQuery = styleSearch.toLowerCase().trim();
+
+    // if no searches, return all
+    if (!query && !styleQuery) return products;
+
+    return products.filter((p) => {
+      const matchesGeneral =
+        !query ||
         p.name.toLowerCase().includes(query) ||
         p.sku?.toLowerCase().includes(query) ||
         p.categories?.toLowerCase().includes(query) ||
-        p.vendors?.some((v) => v.toLowerCase().includes(query))
-    );
-  }, [searchQuery, products]);
+        p.vendors?.some((v) => v.toLowerCase().includes(query));
+
+      const matchesStyle = !styleQuery || p.style?.toLowerCase().includes(styleQuery);
+
+      // both must match (AND). If you want OR behavior, change to matchesGeneral || matchesStyle
+      return matchesGeneral && matchesStyle;
+    });
+  }, [searchQuery, styleSearch, products]);
 
   const updateProductInState = (updatedProduct: Product) => {
     setProducts((prev) => prev.map((p) => (p.id === updatedProduct.id ? updatedProduct : p)));
@@ -264,35 +276,34 @@ export default function ProductsPage() {
   const orderMore = (product: Product) => setOrderModalProduct(product);
   const closeOrderModal = () => setOrderModalProduct(null);
 
-const handleOrderMoreSubmit = async (product: Product, count: number) => {
-  if (!product || count < 1) return;
+  const handleOrderMoreSubmit = async (product: Product, count: number) => {
+    if (!product || count < 1) return;
 
-  try {
-    // Just update the product with the new needToOrder value
-    const response = await fetch(`http://localhost:4000/api/products/needToOrder/${product.id}`, {
-      method: "PATCH", // or "PUT" if your backend prefers
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        needToOrder: count, // This assumes you already added this field in your DB
-      }),
-    });
-    if (!response.ok) {
-      throw new Error("Failed to update needToOrder");
+    try {
+      // Just update the product with the new needToOrder value
+      const response = await fetch(`http://localhost:4000/api/products/needToOrder/${product.id}`, {
+        method: "PATCH", // or "PUT" if your backend prefers
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          needToOrder: count, // This assumes you already added this field in your DB
+        }),
+      });
+      if (!response.ok) {
+        throw new Error("Failed to update needToOrder");
+      }
+
+      // Update the product in local state so UI updates instantly
+      setProducts((prev) =>
+        prev.map((p) =>
+          p.id === product.id ? { ...p, needToOrder: count } : p
+        )
+      );
+      setOrderModalProduct(null); // close modal
+    } catch (err) {
+      console.error(err);
+      alert("Failed to save. Check console.");
     }
-
-    // Update the product in local state so UI updates instantly
-    setProducts((prev) =>
-      prev.map((p) =>
-        p.id === product.id ? { ...p, needToOrder: count } : p
-      )
-    );
-    setOrderModalProduct(null); // close modal
-  } catch (err) {
-    console.error(err);
-    alert("Failed to save. Check console.");
-  }
-};
-
+  };
 
   const setNonTaxable = (id: string) => console.log("Set non-taxable", id);
 
@@ -317,64 +328,68 @@ const handleOrderMoreSubmit = async (product: Product, count: number) => {
   };
 
   const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => e.preventDefault();
-const createProduct = async () => {
-  if (!newName.trim() || !newPrice.trim() || !newInputCost.trim()) {
-    alert("Name, Price, and Cost are required.");
-    return;
-  }
 
-  const formData = new FormData();
-  formData.append("name", newName.trim());
-  formData.append("style", newStyle.trim());
-  formData.append("price", newPrice.trim());
-  formData.append("inputcost", newInputCost.trim());
-  formData.append("stock", newStock || "0");
-  formData.append("needToOrder", "0"); // ← important: send the field!
-
-  if (newSku.trim()) formData.append("sku", newSku.trim());
-  if (newDescription.trim()) formData.append("description", newDescription.trim());
-  if (newCategories.trim()) formData.append("categories", newCategories.trim());
-  if (newVendors.length > 0) formData.append("vendors", newVendors.join(","));
-
-  images.forEach((img) => formData.append("images", img));
-
-  try {
-    const res = await fetch("http://localhost:4000/api/products", {
-      method: "POST",
-      body: formData,
-    });
-
-    if (!res.ok) {
-      const error = await res.json().catch(() => ({}));
-      throw new Error(error.message || "Failed to create product");
+  const createProduct = async () => {
+    if (!newName.trim() || !newPrice.trim() || !newInputCost.trim()) {
+      alert("Name, Price, and Cost are required.");
+      return;
     }
 
-    const newProduct: Product = await res.json();
-    newProduct.id = String(newProduct.id);
+    const formData = new FormData();
+    formData.append("name", newName.trim());
+    formData.append("style", newStyle.trim());
+    formData.append("price", newPrice.trim());
+    formData.append("inputcost", newInputCost.trim());
+    formData.append("stock", newStock || "0");
+    formData.append("needToOrder", "0"); // keep the field used by modal/back-end, hidden in UI
 
-    // Add to list + refresh
-    setProducts((prev) => [...prev, newProduct]);
-    loadProducts(); // optional: refresh from server
+    if (newSku.trim()) formData.append("sku", newSku.trim());
+    if (newDescription.trim()) formData.append("description", newDescription.trim());
+    if (newCategories.trim()) formData.append("categories", newCategories.trim());
+    if (newVendors.length > 0) formData.append("vendors", newVendors.join(","));
 
-    // Reset form
-    setNewName("");
-    setNewStyle("");
-    setNewPrice("");
-    setNewInputCost("");
-    setNewSku("");
-    setNewDescription("");
-    setNewCategories("");
-    setNewVendors([]);
-    setNewStock("0");
-    setImages([]);
-    modalClose();
+    images.forEach((img) => formData.append("images", img));
+    console.log("HELP FormData contents:");
+    formData.forEach((value, key) => {
+      console.log(key, value);
+    });
+    try {
+      const res = await fetch("http://localhost:4000/api/products", {
+        method: "POST",
+        body: formData,
+      });
 
-    alert("Product created successfully!");
-  } catch (err: any) {
-    console.error(err);
-    alert("Failed to save product: " + err.message);
-  }
-};
+      if (!res.ok) {
+        const error = await res.json().catch(() => ({}));
+        throw new Error(error.message || "Failed to create product");
+      }
+
+      const newProduct: Product = await res.json();
+      newProduct.id = String(newProduct.id);
+
+      // Add to list + refresh
+      setProducts((prev) => [...prev, newProduct]);
+      loadProducts(); // optional: refresh from server
+
+      // Reset form
+      setNewName("");
+      setNewStyle("");
+      setNewPrice("");
+      setNewInputCost("");
+      setNewSku("");
+      setNewDescription("");
+      setNewCategories("");
+      setNewVendors([]);
+      setNewStock("0");
+      setImages([]);
+      modalClose();
+
+      alert("Product created successfully!");
+    } catch (err: any) {
+      console.error(err);
+      alert("Failed to save product: " + err.message);
+    }
+  };
 
   return (
     <div className="flex min-h-screen bg-zinc-100 dark:bg-black">
@@ -391,13 +406,20 @@ const createProduct = async () => {
               </button>
             </div>
 
-            <div className="max-w-md mx-auto mb-4">
+            <div className="max-w-md mx-auto mb-4 space-y-2">
               <input
                 type="text"
                 placeholder="Search by name, SKU, category, or vendor..."
                 className="w-full px-4 py-3 rounded-lg border border-zinc-300 dark:border-zinc-700 dark:bg-zinc-800 dark:text-white"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
+              />
+              <input
+                type="text"
+                placeholder="Search by style..."
+                className="w-full px-4 py-3 rounded-lg border border-zinc-300 dark:border-zinc-700 dark:bg-zinc-800 dark:text-white"
+                value={styleSearch}
+                onChange={(e) => setStyleSearch(e.target.value)}
               />
             </div>
 
