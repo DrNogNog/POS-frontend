@@ -5,23 +5,19 @@ import { Menu, Transition } from "@headlessui/react";
 
 export interface Variant {
   size: string;
-  sku: string;
   price: number;
 }
 
 export interface Product {
   id: string;
   name: string;
-  style: string;
   description?: string | null;
-  sku?: string | null;
   inputcost: number;
   price: number;
   deletedAt?: string | null;
   images: string[];
   stock: number;
   vendors: string[];
-  categories: string;
   logs?: any[];
   orders?: any[];
   variants?: Variant[];
@@ -54,31 +50,30 @@ export default function ProductTableRow({
 }: ProductTableRowProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editedProduct, setEditedProduct] = useState<Product>({ ...product });
+
   const [vendorsInput, setVendorsInput] = useState<string>(
     editedProduct.vendors?.join(", ") ?? ""
   );
 
-
-// When starting to edit
+  // Start editing
   const startEditing = () => {
-  setEditedProduct({ ...product });
-  setVendorsInput(product.vendors?.join(", ") ?? "");
-  setIsEditing(true);
-};
+    setEditedProduct({ ...product });
+    setVendorsInput(product.vendors?.join(", ") ?? "");
+    setIsEditing(true);
+  };
 
-  // Update vendors array only when saving
-const saveChanges = () => {
-  const vendorsArray = vendorsInput
-    .split(",")
-    .map((v) => v.trim())
-    .filter(Boolean);
+  // Save
+  const saveChanges = () => {
+    const vendorsArray = vendorsInput
+      .split(",")
+      .map((v) => v.trim())
+      .filter(Boolean);
 
-  editProduct({ ...editedProduct, vendors: vendorsArray });
-  setIsEditing(false);
-};
+    editProduct({ ...editedProduct, vendors: vendorsArray });
+    setIsEditing(false);
+  };
 
-
-
+  // Generic handler
   const handleChange = (field: keyof Product, value: any) => {
     setEditedProduct((prev) => ({ ...prev, [field]: value }));
   };
@@ -90,6 +85,7 @@ const saveChanges = () => {
 
   return (
     <tr className={`hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors ${rowClassName}`}>
+      {/* NAME */}
       {visibleColumns.has("Item") && (
         <td className="px-6 py-4 font-medium text-zinc-900 dark:text-zinc-100">
           {isEditing ? (
@@ -103,29 +99,16 @@ const saveChanges = () => {
             product.name
           )}
 
-          {product.variants?.map((v) => (
-            <div key={v.sku ?? `${product.id}-${v.size}`} className="text-sm text-zinc-500 dark:text-zinc-400">
-              {v.size} - ${v.price}
+          {/* Variants */}
+          {product.variants?.map((v, i) => (
+            <div key={i} className="text-sm text-zinc-500 dark:text-zinc-400">
+              {v.size} — ${v.price}
             </div>
           ))}
         </td>
       )}
 
-      {visibleColumns.has("Style") && (
-        <td className="px-6 py-4 text-zinc-700 dark:text-zinc-300">
-          {isEditing ? (
-            <input
-              type="text"
-              value={editedProduct.style}
-              onChange={(e) => handleChange("style", e.target.value)}
-              className="border rounded px-2 py-1 w-full dark:bg-zinc-700 dark:text-white"
-            />
-          ) : (
-            product.style
-          )}
-        </td>
-      )}
-
+      {/* DESCRIPTION */}
       {visibleColumns.has("Description") && (
         <td className="px-6 py-4 text-zinc-700 dark:text-zinc-300">
           {isEditing ? (
@@ -141,6 +124,7 @@ const saveChanges = () => {
         </td>
       )}
 
+      {/* COST */}
       {visibleColumns.has("Cost") && (
         <td className="px-6 py-4 text-right text-zinc-800 dark:text-zinc-200">
           {isEditing ? (
@@ -156,21 +140,7 @@ const saveChanges = () => {
         </td>
       )}
 
-      {visibleColumns.has("SKU") && (
-        <td className="px-6 py-4 text-zinc-700 dark:text-zinc-300">
-          {isEditing ? (
-            <input
-              type="text"
-              value={editedProduct.sku ?? ""}
-              onChange={(e) => handleChange("sku", e.target.value)}
-              className="border rounded px-2 py-1 w-full dark:bg-zinc-700 dark:text-white"
-            />
-          ) : (
-            product.sku ?? "-"
-          )}
-        </td>
-      )}
-
+      {/* PRICE */}
       {visibleColumns.has("Price") && (
         <td className="px-6 py-4 text-right text-zinc-800 dark:text-zinc-200">
           {isEditing ? (
@@ -186,21 +156,7 @@ const saveChanges = () => {
         </td>
       )}
 
-      {visibleColumns.has("Categories") && (
-        <td className="px-6 py-4 text-zinc-700 dark:text-zinc-300">
-          {isEditing ? (
-            <input
-              type="text"
-              value={editedProduct.categories}
-              onChange={(e) => handleChange("categories", e.target.value)}
-              className="border rounded px-2 py-1 w-full dark:bg-zinc-700 dark:text-white"
-            />
-          ) : (
-            product.categories ?? "-"
-          )}
-        </td>
-      )}
-
+      {/* STOCK */}
       {visibleColumns.has("Stock") && (
         <td className="px-6 py-4 text-right text-zinc-800 dark:text-zinc-200">
           {isEditing ? (
@@ -215,25 +171,25 @@ const saveChanges = () => {
           )}
         </td>
       )}
-      
+
+      {/* VENDORS */}
       {visibleColumns.has("Vendors") && (
-  <td className="px-6 py-4 text-zinc-700 dark:text-zinc-300">
-    {isEditing ? (
-      <input
-        type="text"
-        value={vendorsInput}
-        onChange={(e) => setVendorsInput(e.target.value)} // spaces and commas allowed
-        placeholder="Vendor1, Vendor 2, Vendor 3"
-        className="border rounded px-2 py-1 w-full dark:bg-zinc-700 dark:text-white"
-      />
-    ) : (
-      product.vendors?.join(", ") ?? "-"
-    )}
-  </td>
-)}
+        <td className="px-6 py-4 text-zinc-700 dark:text-zinc-300">
+          {isEditing ? (
+            <input
+              type="text"
+              value={vendorsInput}
+              onChange={(e) => setVendorsInput(e.target.value)}
+              placeholder="Vendor1, Vendor2"
+              className="border rounded px-2 py-1 w-full dark:bg-zinc-700 dark:text-white"
+            />
+          ) : (
+            product.vendors?.join(", ") ?? "-"
+          )}
+        </td>
+      )}
 
-
-
+      {/* ACTIONS */}
       {visibleColumns.has("Actions") && (
         <td className="px-6 py-4 text-right">
           <Menu as="div" className="relative inline-block text-left">
@@ -250,28 +206,25 @@ const saveChanges = () => {
               leaveFrom="transform opacity-100 scale-100"
               leaveTo="transform opacity-0 scale-95"
             >
-              <Menu.Items className="absolute right-0 mt-2 w-56 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 divide-y divide-zinc-100 dark:divide-zinc-700 rounded-md shadow-lg focus:outline-none z-50">
+              <Menu.Items className="absolute right-0 mt-2 w-56 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-md shadow-lg z-50">
                 <div className="px-1 py-1">
                   {isEditing ? (
                     <>
                       <Menu.Item>
                         {({ active }) => (
                           <button
-                            className={`${
-                              active ? "bg-gray-100 dark:bg-zinc-700" : ""
-                            } group flex w-full items-center px-2 py-2 text-sm text-green-600`}
+                            className={`${active ? "bg-gray-100 dark:bg-zinc-700" : ""} px-2 py-2 text-sm text-green-600 w-full text-left`}
                             onClick={saveChanges}
                           >
                             Save
                           </button>
                         )}
                       </Menu.Item>
+
                       <Menu.Item>
                         {({ active }) => (
                           <button
-                            className={`${
-                              active ? "bg-gray-100 dark:bg-zinc-700" : ""
-                            } group flex w-full items-center px-2 py-2 text-sm text-gray-600`}
+                            className={`${active ? "bg-gray-100 dark:bg-zinc-700" : ""} px-2 py-2 text-sm text-gray-600 w-full text-left`}
                             onClick={cancelEdit}
                           >
                             Cancel
@@ -284,83 +237,62 @@ const saveChanges = () => {
                       <Menu.Item>
                         {({ active }) => (
                           <button
-                            className={`${
-                              active ? "bg-gray-100 dark:bg-zinc-700" : ""
-                            } group flex w-full items-center px-2 py-2 text-sm`}
-                            onClick={() => setIsEditing(true)}
+                            className={`${active ? "bg-gray-100 dark:bg-zinc-700" : ""} px-2 py-2 text-sm w-full text-left`}
+                            onClick={startEditing}
                           >
                             Edit
                           </button>
                         )}
                       </Menu.Item>
+
                       <Menu.Item>
                         {({ active }) => (
                           <button
-                            className={`${
-                              active ? "bg-gray-100 dark:bg-zinc-700" : ""
-                            } group flex w-full items-center px-2 py-2 text-sm`}
+                            className={`${active ? "bg-gray-100 dark:bg-zinc-700" : ""} px-2 py-2 text-sm w-full text-left`}
                             onClick={() => duplicateProduct(product)}
                           >
                             Duplicate
                           </button>
                         )}
                       </Menu.Item>
+
                       <Menu.Item>
                         {({ active }) => (
                           <button
-                            className={`${
-                              active ? "bg-gray-100 dark:bg-zinc-700" : ""
-                            } group flex w-full items-center px-2 py-2 text-sm`}
+                            className={`${active ? "bg-gray-100 dark:bg-zinc-700" : ""} px-2 py-2 text-sm w-full text-left`}
                             onClick={() => orderMore(product.id)}
                           >
                             Order More
                           </button>
                         )}
                       </Menu.Item>
+
                       <Menu.Item>
                         {({ active }) => (
                           <button
-                            className={`${
-                              active ? "bg-gray-100 dark:bg-zinc-700" : ""
-                            } group flex w-full items-center px-2 py-2 text-sm`}
+                            className={`${active ? "bg-gray-100 dark:bg-zinc-700" : ""} px-2 py-2 text-sm w-full text-left`}
                             onClick={() => setNonTaxable(product.id)}
                           >
-                            Set as Non-Taxable
+                            Set Non-Taxable
                           </button>
                         )}
                       </Menu.Item>
+
                       <Menu.Item>
                         {({ active }) => (
                           <button
-                            className={`${
-                              active ? "bg-gray-100 dark:bg-zinc-700" : ""
-                            } group flex w-full items-center px-2 py-2 text-sm`}
+                            className={`${active ? "bg-gray-100 dark:bg-zinc-700" : ""} px-2 py-2 text-sm w-full text-left`}
                             onClick={() => archiveProduct(product.id)}
                           >
                             Archive
                           </button>
                         )}
                       </Menu.Item>
+
                       <Menu.Item>
                         {({ active }) => (
                           <button
-                            className={`${
-                              active ? "bg-gray-100 dark:bg-zinc-700" : ""
-                            } group flex w-full items-center px-2 py-2 text-sm`}
-                            onClick={() => updateLowStockAlert(product.id)}
-                          >
-                            Update Low Stock Alert
-                          </button>
-                        )}
-                      </Menu.Item>
-                      <Menu.Item>
-                        {({ active }) => (
-                          <button
-                            className={`${
-                              active
-                                ? "bg-gray-100 dark:bg-zinc-700 text-red-600"
-                                : "text-red-500"
-                            } group flex w-full items-center px-2 py-2 text-sm`}
+                            className={`${active ? "bg-gray-100 dark:bg-zinc-700 text-red-600" : "text-red-500"} px-2 py-2 text-sm w-full text-left`}
                             onClick={() => deleteProduct(product.id)}
                           >
                             Delete

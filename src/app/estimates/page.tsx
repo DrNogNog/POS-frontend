@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Sidebar from "@/components/sidebar";
 import { generateEstimatePdf } from "@/lib/generateEstimatePdf";
 
@@ -9,6 +9,14 @@ type ItemRow = {
   qty: number | "";
   description: string;
   rate: number | "";
+};
+
+type Product = {
+  id: number;
+  name: string;
+  description: string;
+  inputcost: number;
+  vendors: string[];
 };
 
 export default function InvoicesPage() {
@@ -24,7 +32,6 @@ export default function InvoicesPage() {
   const [billTo, setBillTo] = useState("");
   const [shipTo, setShipTo] = useState("");
 
-  // fixed 10 rows
   const [items, setItems] = useState<ItemRow[]>(
     Array.from({ length: 10 }).map(() => ({
       sku: "",
@@ -35,10 +42,37 @@ export default function InvoicesPage() {
   );
 
   const [discountPercent, setDiscountPercent] = useState<number | "">("");
+  const [products, setProducts] = useState<Product[]>([]);
+
+  useEffect(() => {
+    const fetchProducts = async () => {
+      try {
+        const res = await fetch("http://localhost:4000/api/products");
+        const data: Product[] = await res.json();
+        setProducts(data);
+      } catch (err) {
+        console.error("Failed to fetch products:", err);
+      }
+    };
+    fetchProducts();
+  }, []);
 
   function updateRow(index: number, key: keyof ItemRow, value: any) {
     const next = items.slice();
     next[index] = { ...next[index], [key]: value };
+
+    // Autofill description and rate if SKU matches a product
+    if (key === "sku") {
+      const product = products.find((p) => p.name === value || p.id.toString() === value);
+      if (product) {
+        next[index].description = product.description;
+        next[index].rate = product.inputcost;
+      } else {
+        next[index].description = "";
+        next[index].rate = "";
+      }
+    }
+
     setItems(next);
   }
 
@@ -57,7 +91,6 @@ export default function InvoicesPage() {
   const { subtotal, discount, total } = calculateTotals();
 
   async function handleGeneratePdf() {
-    // Generate unique invoice number
     const invoiceNo = `INV-${String(Date.now()).slice(-6)}`;
 
     const payload = {
@@ -70,7 +103,7 @@ export default function InvoicesPage() {
       website,
       date,
       estimateNo: estimateNo || "",
-      invoiceNo, // ✅ required property
+      invoiceNo,
       billTo,
       shipTo,
       items,
@@ -81,16 +114,13 @@ export default function InvoicesPage() {
     };
 
     try {
-      // 1️⃣ Generate PDF bytes (Blob)
       const pdfBlob = (await generateEstimatePdf(payload, true)) as Blob;
 
-      // 2️⃣ Convert to base64
       const reader = new FileReader();
       reader.readAsDataURL(pdfBlob);
       reader.onloadend = async () => {
         const base64Pdf = (reader.result as string).split(",")[1];
 
-        // 3️⃣ POST full estimate with items to backend
         const res = await fetch("http://localhost:4000/api/estimates/save", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -118,42 +148,22 @@ export default function InvoicesPage() {
         <h1 className="text-2xl font-semibold mb-4">Create Estimate</h1>
 
         {/* HEADER */}
-        <section className="bg-white p-4 rounded shadow mb-6">
-          <h2 className="font-medium mb-2">Header</h2>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm">Company (optional)</label>
-              <input value={companyName} onChange={(e) => setCompanyName(e.target.value)} className="w-full border px-2 py-1 rounded" placeholder="Company name" />
-              <input value={companyAddr1} onChange={(e) => setCompanyAddr1(e.target.value)} className="w-full border px-2 py-1 rounded mt-2" placeholder="Address line 1" />
-              <input value={companyAddr2} onChange={(e) => setCompanyAddr2(e.target.value)} className="w-full border px-2 py-1 rounded mt-2" placeholder="Address line 2" />
-              <div className="flex gap-2 mt-2">
-                <input value={phone} onChange={(e) => setPhone(e.target.value)} className="w-1/2 border px-2 py-1 rounded" placeholder="Phone" />
-                <input value={fax} onChange={(e) => setFax(e.target.value)} className="w-1/2 border px-2 py-1 rounded" placeholder="Fax" />
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-sm">Contact Info</label>
-              <input value={email} onChange={(e) => setEmail(e.target.value)} className="w-full border px-2 py-1 rounded" placeholder="Email" />
-              <input value={website} onChange={(e) => setWebsite(e.target.value)} className="w-full border px-2 py-1 rounded mt-2" placeholder="Website" />
-              <div className="flex gap-2 mt-2">
-                <input value={date} onChange={(e) => setDate(e.target.value)} className="w-1/2 border px-2 py-1 rounded" type="date" />
-                <input value={estimateNo} onChange={(e) => setEstimateNo(e.target.value)} className="w-1/2 border px-2 py-1 rounded" placeholder="Estimate #" />
-              </div>
-            </div>
-          </div>
+        <section className="bg-white p-4 rounded shadow mb-6 grid grid-cols-2 gap-4">
+          <input value={companyName} onChange={(e) => setCompanyName(e.target.value)} placeholder="Company name" className="w-full border px-2 py-1 rounded" />
+          <input value={companyAddr1} onChange={(e) => setCompanyAddr1(e.target.value)} placeholder="Address line 1" className="w-full border px-2 py-1 rounded" />
+          <input value={companyAddr2} onChange={(e) => setCompanyAddr2(e.target.value)} placeholder="Address line 2" className="w-full border px-2 py-1 rounded" />
+          <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Phone" className="w-full border px-2 py-1 rounded" />
+          <input value={fax} onChange={(e) => setFax(e.target.value)} placeholder="Fax" className="w-full border px-2 py-1 rounded" />
+          <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" className="w-full border px-2 py-1 rounded" />
+          <input value={website} onChange={(e) => setWebsite(e.target.value)} placeholder="Website" className="w-full border px-2 py-1 rounded" />
+          <input value={date} onChange={(e) => setDate(e.target.value)} type="date" className="w-full border px-2 py-1 rounded" />
+          <input value={estimateNo} onChange={(e) => setEstimateNo(e.target.value)} placeholder="Estimate #" className="w-full border px-2 py-1 rounded" />
         </section>
 
         {/* BILL TO / SHIP TO */}
         <section className="bg-white p-4 rounded shadow mb-6 grid grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm">Bill To</label>
-            <textarea value={billTo} onChange={(e) => setBillTo(e.target.value)} className="w-full border px-2 py-1 rounded" rows={5} />
-          </div>
-          <div>
-            <label className="block text-sm">Ship To</label>
-            <textarea value={shipTo} onChange={(e) => setShipTo(e.target.value)} className="w-full border px-2 py-1 rounded" rows={5} />
-          </div>
+          <textarea value={billTo} onChange={(e) => setBillTo(e.target.value)} placeholder="Bill To" className="w-full border px-2 py-1 rounded" rows={5} />
+          <textarea value={shipTo} onChange={(e) => setShipTo(e.target.value)} placeholder="Ship To" className="w-full border px-2 py-1 rounded" rows={5} />
         </section>
 
         {/* ITEMS TABLE */}
@@ -163,7 +173,7 @@ export default function InvoicesPage() {
             <table className="w-full text-sm table-fixed border-collapse">
               <thead>
                 <tr>
-                  <th className="border px-2 w-24">Item</th>
+                  <th className="border px-2 w-24">SKU / Item</th>
                   <th className="border px-2 w-16">Qty</th>
                   <th className="border px-2">Description</th>
                   <th className="border px-2 w-28">Rate</th>
@@ -185,13 +195,7 @@ export default function InvoicesPage() {
                         <input className="w-full" value={r.description} onChange={(e) => updateRow(i, "description", e.target.value)} />
                       </td>
                       <td className="border px-2">
-                        <input
-                          className="w-full"
-                          type="number"
-                          step="0.01"
-                          value={r.rate}
-                          onChange={(e) => updateRow(i, "rate", e.target.value)}
-                        />
+                        <input className="w-full" type="number" step="0.01" value={r.rate} onChange={(e) => updateRow(i, "rate", e.target.value)} />
                       </td>
                       <td className="border px-2 text-right">{rowTotal.toFixed(2)}</td>
                     </tr>
@@ -206,37 +210,18 @@ export default function InvoicesPage() {
         <section className="bg-white p-4 rounded shadow mb-6 max-w-md">
           <div className="flex gap-2 items-center mb-2">
             <label className="w-32">Discount %</label>
-            <input
-              className="border px-2 py-1 rounded flex-1"
-              type="number"
-              step="0.01"
-              value={discountPercent}
-              onChange={(e) => setDiscountPercent(e.target.value === "" ? "" : Number(e.target.value))}
-            />
+            <input type="number" step="0.01" value={discountPercent} onChange={(e) => setDiscountPercent(e.target.value === "" ? "" : Number(e.target.value))} className="border px-2 py-1 rounded flex-1" />
           </div>
-
           <div className="space-y-1">
-            <div className="flex justify-between">
-              <span>Subtotal</span>
-              <span>${subtotal.toFixed(2)}</span>
-            </div>
-            <div className="flex justify-between">
-              <span>Discount</span>
-              <span>-${discount.toFixed(2)}</span>
-            </div>
-            <div className="flex justify-between font-semibold text-lg pt-1 border-t">
-              <span>Total</span>
-              <span>${total.toFixed(2)}</span>
-            </div>
+            <div className="flex justify-between"><span>Subtotal</span><span>${subtotal.toFixed(2)}</span></div>
+            <div className="flex justify-between"><span>Discount</span><span>-${discount.toFixed(2)}</span></div>
+            <div className="flex justify-between font-semibold text-lg pt-1 border-t"><span>Total</span><span>${total.toFixed(2)}</span></div>
           </div>
         </section>
 
         {/* GENERATE BUTTON */}
         <div className="flex gap-2">
-          <button
-            onClick={handleGeneratePdf}
-            className="bg-indigo-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-indigo-700 transition"
-          >
+          <button onClick={handleGeneratePdf} className="bg-indigo-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-indigo-700 transition">
             Generate & Save Estimate
           </button>
         </div>

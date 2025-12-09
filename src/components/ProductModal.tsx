@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { X, Upload, Image as ImageIcon, Trash2 } from "lucide-react";
+import { X, Upload, Trash2 } from "lucide-react";
 
 export interface ProductModalProps {
   isOpen: boolean;
@@ -10,16 +10,8 @@ export interface ProductModalProps {
   // Form fields
   newName: string;
   setNewName: React.Dispatch<React.SetStateAction<string>>;
-  newStyle: string;
-  setNewStyle: React.Dispatch<React.SetStateAction<string>>;
-  newPrice: string;
-  setNewPrice: React.Dispatch<React.SetStateAction<string>>;
-  newSku: string;
-  setNewSku: React.Dispatch<React.SetStateAction<string>>;
   newDescription: string;
   setNewDescription: React.Dispatch<React.SetStateAction<string>>;
-  newCategories: string;
-  setNewCategories: React.Dispatch<React.SetStateAction<string>>;
   newVendors: string[];
   setNewVendors: React.Dispatch<React.SetStateAction<string[]>>;
   newStock: string;
@@ -42,16 +34,8 @@ export default function ProductModal({
   isLoading = false,
   newName,
   setNewName,
-  newStyle,
-  setNewStyle,
-  newPrice,
-  setNewPrice,
-  newSku,
-  setNewSku,
   newDescription,
   setNewDescription,
-  newCategories,
-  setNewCategories,
   newVendors,
   setNewVendors,
   newStock,
@@ -66,6 +50,7 @@ export default function ProductModal({
 }: ProductModalProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [vendorsInput, setVendorsInput] = useState<string>(newVendors.join(", "));
+
   const removeImage = (index: number) => {
     setImages((prev) => prev.filter((_, i) => i !== index));
   };
@@ -93,7 +78,7 @@ export default function ProductModal({
         </div>
 
         <div className="p-6 space-y-6">
-          {/* Grid: Two columns on larger screens */}
+          {/* Grid: Two columns */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             <div>
               <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1.5">
@@ -104,49 +89,7 @@ export default function ProductModal({
                 value={newName}
                 onChange={(e) => setNewName(e.target.value)}
                 className="w-full px-4 py-2.5 rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
-                placeholder="e.g. Cabinet"
-                required
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1.5">
-                Style / Variant
-              </label>
-              <input
-                type="text"
-                value={newStyle}
-                onChange={(e) => setNewStyle(e.target.value)}
-                className="w-full px-4 py-2.5 rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
-                placeholder="e.g. S5, S6"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1.5">
-                SKU *
-              </label>
-              <input
-                type="text"
-                value={newSku}
-                onChange={(e) => setNewSku(e.target.value)}
-                className="w-full px-4 py-2.5 rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
-                placeholder="W092"
-                required
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1.5">
-                Price ($)*
-              </label>
-              <input
-                type="number"
-                step="0.01"
-                value={newPrice}
-                onChange={(e) => setNewPrice(e.target.value)}
-                className="w-full px-4 py-2.5 rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
-                placeholder="29.99"
+                placeholder="e.g. B9-CC-CR (Item-Vendor-Style)"
                 required
               />
             </div>
@@ -196,38 +139,24 @@ export default function ProductModal({
 
             <div>
               <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1.5">
-                Categories (comma separated)
-              </label>
-              <input
-                type="text"
-                value={newCategories}
-                onChange={(e) => setNewCategories(e.target.value)}
-                className="w-full px-4 py-2.5 rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
-                placeholder="Redwood, Blackwood"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1.5">
                 Vendors / Suppliers (comma separated)
               </label>
               <input
                 type="text"
                 value={vendorsInput}
-                onChange={(e) => setVendorsInput(e.target.value)} // allow typing freely
-                onBlur={() => {
-                  // only update array when user leaves the field
+                onChange={(e) => setVendorsInput(e.target.value)}
+                onBlur={() =>
                   setNewVendors(
                     vendorsInput
                       .split(",")
                       .map((v) => v.trim())
                       .filter(Boolean)
-                  );
-                }}
+                  )
+                }
                 className="w-full px-4 py-2.5 rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
                 placeholder="Alpha Cabinets, Global Cabinets"
               />
-          </div>
+            </div>
           </div>
 
           {/* Image Upload */}
@@ -244,7 +173,8 @@ export default function ProductModal({
             >
               <Upload className="w-12 h-12 mx-auto mb-4 text-zinc-400" />
               <p className="text-zinc-600 dark:text-zinc-400">
-                Drop images here or <span className="text-blue-600 font-medium">click to browse</span>
+                Drop images here or{" "}
+                <span className="text-blue-600 font-medium">click to browse</span>
               </p>
               <input
                 ref={fileInputRef}
@@ -256,11 +186,13 @@ export default function ProductModal({
               />
             </div>
 
-            {/* Image Previews */}
             {images.length > 0 && (
               <div className="grid grid-cols-4 sm:grid-cols-6 gap-3 mt-4">
                 {images.map((file, index) => (
-                  <div key={index} className="relative group rounded-lg overflow-hidden bg-zinc-100 dark:bg-zinc-800">
+                  <div
+                    key={index}
+                    className="relative group rounded-lg overflow-hidden bg-zinc-100 dark:bg-zinc-800"
+                  >
                     <img
                       src={URL.createObjectURL(file)}
                       alt={`Preview ${index + 1}`}
@@ -293,16 +225,10 @@ export default function ProductModal({
           </button>
           <button
             onClick={createProduct}
-            disabled={isLoading || !newName || !newSku || !newPrice}
+            disabled={isLoading || !newName}
             className="px-8 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-medium transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
           >
-            {isLoading ? (
-              <>Saving...</>
-            ) : (
-              <>
-                <span>Save Product</span>
-              </>
-            )}
+            {isLoading ? <>Saving...</> : <span>Save Product</span>}
           </button>
         </div>
       </div>

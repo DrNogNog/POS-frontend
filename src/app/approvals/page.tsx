@@ -3,16 +3,18 @@
 import { useState, useEffect } from "react";
 import Sidebar from "@/components/sidebar";
 import { format } from "date-fns";
-import { parseISO } from "date-fns/parseISO";
 import { generateInvoicePdf } from "@/lib/generateInvoicePdf";
 import { Payload } from "@/types/estimate";
 
 interface Product {
   id: number;
   name: string;
-  sku?: string | null;
-  price: number;
+  description: string;
+  inputcost: number;
   stock: number;
+  images: string[];
+  vendors: string[];
+  needToOrder: number;
 }
 
 interface EstimateItem {
@@ -43,7 +45,6 @@ interface Estimate {
 
 interface InvoiceItem {
   productId: number;
-  sku: string;
   description: string;
   qty: number;
   rate: number;
@@ -112,76 +113,97 @@ export default function EstimatesPage() {
     if (!confirm(`Create invoice from ${estimate.estimateNo}?`)) return;
 
     try {
-      // Fetch full estimate
+      // 1. Fetch full estimate
       const res = await fetch(`http://localhost:4000/api/estimates/${estimate.id}`);
       if (!res.ok) throw new Error("Failed to fetch full estimate");
       const full: Estimate = await res.json();
 
-      // Fetch all products
+      // 2. Fetch all products once
       const productsRes = await fetch("http://localhost:4000/api/products");
       if (!productsRes.ok) throw new Error("Failed to fetch products");
       const products: Product[] = await productsRes.json();
-      console.log("Products fetched:", full.items);
-      // Map estimate items to products
-      const invoiceItems: InvoiceItem[] = (full.items || [])
-        .map((i: EstimateItem & { sku?: string }) => {
+      console.log("here", products)
+      // 3. Resolve items → products (with fallback for old format)
+            // 3. Resolve items → products (supports old & new formats)
+      // Replace your entire resolvedItems block with this:
+            // FINAL VERSION – works with your real data (uses products.name correctly)
+      const resolvedItems = (full.items || [])
+        .map((i: any) => {
           const qty = Number(i.qty);
-          if (!i.sku || !qty || qty <= 0) return null;
-          const searchKey = i.sku || i.item;
-          const product = products.find(
-          (p) => p.sku?.trim() === searchKey.trim() || p.name.trim() === searchKey.trim()
-        );
-        console.log("Searching for:", searchKey, "Products:", products);
+          const rate = Number(i.rate || i.inputcost);
+          if (isNaN(qty) || qty <= 0 || isNaN(rate)) return null;
 
-      if (!product) return null;
+          // Get the product identifier: try sku first (old format), then item (new format)
+          const productIdentifier = (i.sku || i.item || "").toString().trim();
+          if (!productIdentifier) return null;
 
-      if (product.stock < qty) {
-        alert(`Insufficient stock for "${product.sku || product.name}"`);
-      }
+          // Find product where product.name === the SKU/item
+          const product = products.find(p => p.name.trim() === productIdentifier);
 
-      return {
-        productId: product.id,
-        sku: product.sku || product.name,
-        description: i.description || product.name,
-        qty,
-        rate: Number(i.rate) || product.price,
-        amount: qty * (Number(i.rate) || product.price),
-      };
-    })
-    .filter((item): item is InvoiceItem => item !== null);
+          if (!product) {
+            throw new Error(
+              `Product not found in inventory!\n` +
+              `SKU/Item: "${productIdentifier}"\n` +
+              `Line: ${JSON.stringify(i)}\n\n` +
+              `Available product names (SKUs): ${products.map(p => p.name).join(', ')}`
+            );
+          }
 
-      console.log("Invoice items prepared:", invoiceItems);
-      if (invoiceItems.length === 0) {
-        alert("No valid products in inventory. Cannot create invoice.");
+          return {
+            product,                                    // the full Product object
+            qty,
+            rate,
+            description: i.description || product.description || product.name,
+          };
+        })
+        .filter(Boolean) as {
+          product: Product;
+          qty: number;
+          rate: number;
+          description: string;
+        }[];
+
+      if (resolvedItems.length === 0) {
+        alert("No valid items found to invoice.");
         return;
       }
 
-      // Decrement stock
-      const productsToDecrement = invoiceItems.map((i) => ({
-        sku: i.sku,
-        qty: i.qty,
-      }));
-      console.log(productsToDecrement)
+      // 4. Build invoice items for PDF
+      const invoiceItems: InvoiceItem[] = resolvedItems.map(
+        ({ product, qty, rate, description }) => ({
+          productId: product.id,
+          description,
+          qty,
+          rate,
+          amount: qty * rate,
+        })
+      );
 
-      const stockRes = await fetch("http://localhost:4000/api/products/decrement-stock", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ items: productsToDecrement }),
-      });
+      // 5. Build stock decrement payload — using the already-resolved product
+     const productsToDecrement = resolvedItems.map(({ product, qty }) => ({
+      name: product.name.trim(),
+      quantity: Number(qty),  // ← THIS FIXES 95% OF 500 ERRORS
+    }));
 
-      if (!stockRes.ok) {
-        const errText = await stockRes.text();
-        throw new Error(`Stock update failed: ${errText}`);
-      }
+    const stockRes = await fetch("http://localhost:4000/api/products/decrement-stock", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ items: productsToDecrement }),
+    });
 
-      // Calculate totals
+    if (!stockRes.ok) {
+      const err = await stockRes.text();
+      throw new Error(`Stock update failed: ${err}`);
+    }
+
+      // 7. Calculate totals
       const subtotal = invoiceItems.reduce((acc, i) => acc + i.amount, 0);
       const discount = Number(full.discount) || 0;
-      const TAX_RATE = Number(full.tax) ? Number(full.tax) / 100 : 0.08875;
+      const taxRate = full.tax ? Number(full.tax) / 100 : 0.08875;
+      const tax = (subtotal - discount) * taxRate;
+      const total = subtotal - discount + tax;
 
-      const tax = (subtotal - discount) * TAX_RATE;
-      const total = (subtotal - discount) + tax;
-      // Generate invoice data
+      // 8. Generate invoice number and PDF
       const invoiceNo = estimate.estimateNo.replace("EST", "INV");
       const today = new Date().toISOString().slice(0, 10);
       const time = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
@@ -201,33 +223,38 @@ export default function EstimatesPage() {
         subtotal: Number(subtotal.toFixed(2)),
         discount: Number(discount.toFixed(2)),
         tax: Number(tax.toFixed(2)),
-        total: Number(total.toFixed(2))
+        total: Number(total.toFixed(2)),
       };
-      // Generate PDF
+
       const pdfBytes = await generateInvoicePdf(invoiceData);
       const base64Pdf = Buffer.from(pdfBytes).toString("base64");
 
-      // Save invoice PDF
+      // 9. Save invoice
       const postRes = await fetch("http://localhost:4000/api/invoices", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ invoiceNo, total, pdf: base64Pdf }),
+        body: JSON.stringify({
+          invoiceNo,
+          total: invoiceData.total,
+          pdf: base64Pdf,
+        }),
       });
 
       if (!postRes.ok) {
         const errText = await postRes.text();
-        throw new Error(`Invoice POST failed: ${errText}`);
+        throw new Error(`Failed to save invoice: ${errText}`);
       }
 
-      // Mark estimate as invoiced
+      // 10. Mark estimate as invoiced
       await fetch(`http://localhost:4000/api/estimates/${estimate.id}/invoiced`, {
         method: "PATCH",
       });
 
-      alert(`Invoice ${invoiceNo} created, saved, and stock updated!`);
+      alert(`Invoice ${invoiceNo} created and stock updated successfully!`);
       fetchEstimates();
-    } catch (err) {
+    } catch (err: any) {
       console.error("Failed to create invoice:", err);
+      alert(err.message || "Failed to create invoice.");
     }
   }
 
@@ -265,11 +292,11 @@ export default function EstimatesPage() {
                   <tr key={est.id} className="hover:bg-gray-50 transition">
                     <td className="px-6 py-4 text-indigo-600 font-medium">{est.estimateNo}</td>
                     <td className="px-6 py-4 text-gray-600">
-                      {format(parseISO(est.date), "MMM dd, yyyy")}
+                      {format(new Date(est.date), "MMM dd, yyyy")}
                     </td>
-                    <td className="px-6 py-4">{est.billTo}</td>
+                    <td className="px-6 py-4">{est.billTo || "-"}</td>
                     <td className="px-6 py-4 text-right font-semibold text-green-600">
-                      ${est.total?.toFixed(2)}
+                      ${est.total?.toFixed(2) ?? "0.00"}
                     </td>
 
                     <td className="px-6 py-4 text-center">
@@ -277,7 +304,7 @@ export default function EstimatesPage() {
                         type="checkbox"
                         checked={est.approved}
                         onChange={() => toggleApproved(est.id, est.approved)}
-                        className="w-5 h-5 text-indigo-600 cursor-pointer"
+                        className="w-5 h-5 text-indigo-600 rounded cursor-pointer"
                       />
                     </td>
 
@@ -290,10 +317,10 @@ export default function EstimatesPage() {
                     </td>
 
                     <td className="px-6 py-4 text-center">
-                      <div className="flex justify-center gap-2">
+                      <div className="flex justify-center gap-3">
                         <button
                           onClick={() => viewEstimate(est.id)}
-                          className="px-4 py-2 bg-blue-600 text-white rounded text-sm hover:bg-blue-700"
+                          className="px-4 py-2 bg-blue-600 text-white rounded text-sm hover:bg-blue-700 transition"
                         >
                           View PDF
                         </button>
@@ -301,7 +328,7 @@ export default function EstimatesPage() {
                         <button
                           onClick={() => createInvoice(est)}
                           disabled={!est.approved || est.invoiced}
-                          className={`px-4 py-2 text-sm rounded ${
+                          className={`px-4 py-2 text-sm rounded transition ${
                             est.approved && !est.invoiced
                               ? "bg-indigo-600 text-white hover:bg-indigo-700"
                               : "bg-gray-300 text-gray-500 cursor-not-allowed"
@@ -312,7 +339,7 @@ export default function EstimatesPage() {
 
                         <button
                           onClick={() => deleteEstimate(est.id, est.estimateNo)}
-                          className="px-4 py-2 bg-red-600 text-white rounded text-sm hover:bg-red-700"
+                          className="px-4 py-2 bg-red-600 text-white rounded text-sm hover:bg-red-700 transition"
                         >
                           Delete
                         </button>

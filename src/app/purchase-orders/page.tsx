@@ -1,4 +1,3 @@
-// app/purchase-orders/page.tsx
 "use client";
 
 import { useState, useEffect } from "react";
@@ -9,8 +8,7 @@ import { generateBillingPdf } from "@/lib/generateBillingPdf";
 interface Product {
   id: string;
   name: string;
-  style: string;
-  sku?: string;
+  description: string; // <-- added description
   inputcost: number;
   stock: number;
   needToOrder: number;
@@ -22,8 +20,6 @@ export type BillingItem = {
   qty: number | "";
   description: string;
   rate: number | "";
-  sku?: string;
-  style?: string;
 };
 
 export type BillingPayload = {
@@ -36,9 +32,9 @@ export type BillingPayload = {
   billTo?: string;
   shipTo?: string;
   items: BillingItem[];
-  subtotal: number;     // Required by generateBillingPdf
+  subtotal: number;
   total: number;
-  invoiceNo: string;    // You type this manually
+  invoiceNo: string;
   salesman?: string;
   tax?: number;
 };
@@ -71,14 +67,14 @@ export default function PurchaseOrdersPage() {
       try {
         const res = await fetch("http://localhost:4000/api/products/needToOrder");
         const data = await res.json();
+        console.log(data);
 
         const filtered = data
           .filter((p: any) => p.needToOrder > 0)
           .map((p: any) => ({
             id: String(p.id),
             name: p.name,
-            style: p.style || "",
-            sku: p.sku || "",
+            description: p.description || "", // <-- include description
             inputcost: Number(p.inputcost),
             stock: p.stock ?? 0,
             needToOrder: p.needToOrder ?? 0,
@@ -97,7 +93,6 @@ export default function PurchaseOrdersPage() {
   }, []);
 
   const openBillingModal = (product: Product) => {
-    const fullName = `${product.name} ${product.style || ""}`.trim();
     const qty = product.needToOrder;
     const rate = product.inputcost;
     const subtotal = qty * rate;
@@ -110,18 +105,18 @@ export default function PurchaseOrdersPage() {
       email: "sales@yourcompany.com",
       website: "www.yourcompany.com",
       date: new Date().toISOString().split("T")[0],
-      invoiceNo: "", // You type this
+      invoiceNo: "",
       salesman: "",
       billTo: "",
       shipTo: "",
-      items: [{
-        item: fullName,
-        qty,
-        description: product.sku || "",
-        rate,
-        sku: product.sku || "",
-        style: product.style || "",
-      }],
+      items: [
+        {
+          item: product.name,
+          qty,
+          description: product.description || "", // <-- autofill description here
+          rate,
+        },
+      ],
       subtotal,
       total: subtotal,
       tax: 0,
@@ -129,14 +124,13 @@ export default function PurchaseOrdersPage() {
     setIsModalOpen(true);
   };
 
-  const blobToBase64 = (blob: Blob): Promise<string> => {
-    return new Promise((resolve, reject) => {
+  const blobToBase64 = (blob: Blob): Promise<string> =>
+    new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = () => resolve(reader.result as string);
       reader.onerror = reject;
       reader.readAsDataURL(blob);
     });
-  };
 
   const handleSubmitBilling = async () => {
     if (!selectedProduct) return;
@@ -145,7 +139,6 @@ export default function PurchaseOrdersPage() {
       return;
     }
 
-    // Recalculate in case user changed items
     const itemsTotal = billingData.items.reduce(
       (sum, item) => sum + Number(item.qty || 0) * Number(item.rate || 0),
       0
@@ -180,27 +173,17 @@ export default function PurchaseOrdersPage() {
         throw new Error(err.error || "Failed to save PDF");
       }
 
-      // 3. Update stock by style + SKU
-      const stockUpdates = finalData.items
-        .filter(item => item.style?.trim() && item.sku?.trim() && item.qty)
-        .map(item => ({
-          style: item.style!.trim(),
-          sku: item.sku!.trim(),
-          qty: Number(item.qty),
-        }));
-
-      if (stockUpdates.length > 0) {
-        const stockRes = await fetch("http://localhost:4000/api/products/increment-stock-by-style-sku", {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ items: stockUpdates }),
-        });
-
-        if (!stockRes.ok) {
-          const err = await stockRes.json();
-          alert(`Warning: Stock update failed — ${err.error || "Check style/SKU"}`);
-        }
-      }
+      // 3) Increment stock for purchased items
+      await fetch("http://localhost:4000/api/products/increment-stock", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          items: billingData.items.map((i) => ({
+            item: i.item,
+            qty: Number(i.qty),
+          })),
+        }),
+      });
 
       // 4. Reset needToOrder
       await fetch(`http://localhost:4000/api/products/needToOrder/${selectedProduct.id}`, {
@@ -210,10 +193,9 @@ export default function PurchaseOrdersPage() {
       });
 
       // 5. Remove from list
-      setProductsToOrder(prev => prev.filter(p => p.id !== selectedProduct.id));
+      setProductsToOrder((prev) => prev.filter((p) => p.id !== selectedProduct.id));
 
-      alert(`Success!\nInvoice #${finalData.invoiceNo} saved\nStock updated correctly.`);
-
+      alert(`Success!\nInvoice #${finalData.invoiceNo} saved.`);
       setIsModalOpen(false);
       setSelectedProduct(null);
     } catch (error: any) {
@@ -257,7 +239,6 @@ export default function PurchaseOrdersPage() {
                   <thead className="bg-gray-50 border-b">
                     <tr>
                       <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase">Product</th>
-                      <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase">Style / SKU</th>
                       <th className="px-6 py-4 text-center text-xs font-medium text-gray-500 uppercase">Stock</th>
                       <th className="px-6 py-4 text-center text-xs font-medium text-gray-500 uppercase">Need</th>
                       <th className="px-6 py-4 text-right text-xs font-medium text-gray-500 uppercase">Cost</th>
@@ -270,11 +251,12 @@ export default function PurchaseOrdersPage() {
                     {productsToOrder.map((product) => (
                       <tr key={product.id} className="hover:bg-gray-50">
                         <td className="px-6 py-5 font-medium">{product.name}</td>
-                        <td className="px-6 py-5 text-sm text-gray-600">
-                          {product.style} {product.sku && `• ${product.sku}`}
-                        </td>
                         <td className="px-6 py-5 text-center">
-                          <span className={`px-3 py-1 rounded-full text-sm ${product.stock < 10 ? "bg-red-100 text-red-800" : "bg-green-100 text-green-800"}`}>
+                          <span
+                            className={`px-3 py-1 rounded-full text-sm ${
+                              product.stock < 10 ? "bg-red-100 text-red-800" : "bg-green-100 text-green-800"
+                            }`}
+                          >
                             {product.stock}
                           </span>
                         </td>
@@ -357,55 +339,6 @@ export default function PurchaseOrdersPage() {
                   />
                 </div>
 
-                <div className="grid grid-cols-2 gap-8">
-                  <div className="bg-blue-50 p-5 rounded-xl border border-blue-200">
-                    <h3 className="font-bold text-lg mb-3 text-blue-900">Bill To</h3>
-                    <input
-                      placeholder="Customer Name"
-                      className="w-full px-4 py-2 border rounded-lg mb-2"
-                      value={billingData.billTo?.split("\n")[0] || ""}
-                      onChange={(e) => {
-                        const lines = billingData.billTo?.split("\n") || [];
-                        lines[0] = e.target.value;
-                        setBillingData((p) => ({ ...p, billTo: lines.join("\n") }));
-                      }}
-                    />
-                    <textarea
-                      placeholder="Address"
-                      rows={4}
-                      className="w-full px-4 py-2 border rounded-lg resize-none"
-                      value={billingData.billTo?.split("\n").slice(1).join("\n") || ""}
-                      onChange={(e) => {
-                        const name = billingData.billTo?.split("\n")[0] || "";
-                        setBillingData((p) => ({ ...p, billTo: [name, e.target.value].filter(Boolean).join("\n") }));
-                      }}
-                    />
-                  </div>
-                  <div className="bg-green-50 p-5 rounded-xl border border-green-200">
-                    <h3 className="font-bold text-lg mb-3 text-green-900">Ship To</h3>
-                    <input
-                      placeholder="Recipient Name"
-                      className="w-full px-4 py-2 border rounded-lg mb-2"
-                      value={billingData.shipTo?.split("\n")[0] || ""}
-                      onChange={(e) => {
-                        const lines = billingData.shipTo?.split("\n") || [];
-                        lines[0] = e.target.value;
-                        setBillingData((p) => ({ ...p, shipTo: lines.join("\n") }));
-                      }}
-                    />
-                    <textarea
-                      placeholder="Shipping Address"
-                      rows={4}
-                      className="w-full px-4 py-2 border rounded-lg resize-none"
-                      value={billingData.shipTo?.split("\n").slice(1).join("\n") || ""}
-                      onChange={(e) => {
-                        const name = billingData.shipTo?.split("\n")[0] || "";
-                        setBillingData((p) => ({ ...p, shipTo: [name, e.target.value].filter(Boolean).join("\n") }));
-                      }}
-                    />
-                  </div>
-                </div>
-
                 <div className="bg-gray-50 p-6 rounded-xl">
                   <div className="flex justify-between items-center mb-4">
                     <h3 className="font-bold text-lg">Items</h3>
@@ -413,7 +346,7 @@ export default function PurchaseOrdersPage() {
                       onClick={() =>
                         setBillingData((p) => ({
                           ...p,
-                          items: [...p.items, { item: "", qty: "", description: "", rate: "", sku: "", style: "" }],
+                          items: [...p.items, { item: "", qty: "", description: "", rate: "" }],
                         }))
                       }
                       className="text-blue-600 hover:text-blue-800 font-medium"
@@ -433,7 +366,7 @@ export default function PurchaseOrdersPage() {
                             newItems[i].item = e.target.value;
                             setBillingData((p) => ({ ...p, items: newItems }));
                           }}
-                          className="col-span-3 px-3 py-2 border rounded"
+                          className="col-span-4 px-3 py-2 border rounded"
                         />
                         <input
                           type="number"
@@ -444,27 +377,17 @@ export default function PurchaseOrdersPage() {
                             newItems[i].qty = e.target.value === "" ? "" : Number(e.target.value);
                             setBillingData((p) => ({ ...p, items: newItems }));
                           }}
-                          className="col-span-1 px-3 py-2 border rounded text-center font-bold"
+                          className="col-span-2 px-3 py-2 border rounded text-center font-bold"
                         />
                         <input
-                          placeholder="Style"
-                          value={item.style || ""}
+                          placeholder="Description"
+                          value={item.description}
                           onChange={(e) => {
                             const newItems = [...billingData.items];
-                            newItems[i].style = e.target.value;
+                            newItems[i].description = e.target.value;
                             setBillingData((p) => ({ ...p, items: newItems }));
                           }}
-                          className="col-span-2 px-3 py-2 border-2 border-purple-300 rounded bg-purple-50 font-medium"
-                        />
-                        <input
-                          placeholder="SKU"
-                          value={item.sku || ""}
-                          onChange={(e) => {
-                            const newItems = [...billingData.items];
-                            newItems[i].sku = e.target.value;
-                            setBillingData((p) => ({ ...p, items: newItems }));
-                          }}
-                          className="col-span-2 px-3 py-2 border-2 border-orange-300 rounded bg-orange-50 font-mono"
+                          className="col-span-3 px-3 py-2 border rounded"
                         />
                         <input
                           type="number"
@@ -478,8 +401,8 @@ export default function PurchaseOrdersPage() {
                           }}
                           className="col-span-2 px-3 py-2 border rounded text-right"
                         />
-                        <div className="col-span-2 text-right font-bold text-green-600">
-                          ${((Number(item.qty || 0) * Number(item.rate || 0)).toFixed(2))}
+                        <div className="col-span-1 text-right font-bold text-green-600">
+                          ${(Number(item.qty || 0) * Number(item.rate || 0)).toFixed(2)}
                         </div>
                       </div>
                     ))}

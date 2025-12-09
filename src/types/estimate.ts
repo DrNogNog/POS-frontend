@@ -1,3 +1,10 @@
+export type InvoiceItem = {
+  productId: number;
+  description: string;
+  qty: number;
+  rate: number;
+  amount: number;
+};
 export type Payload = {
   companyName?: string;
   companyAddr1?: string; 
@@ -8,7 +15,7 @@ export type Payload = {
   estimateNo?: string;
   billTo?: string;
   shipTo?: string;
-  items: { sku: string; qty: number | ""; description: string; rate: number | "" }[];
+  items: InvoiceItem[];
   subtotal: number;
   discount: number;
   total: number;
@@ -17,6 +24,7 @@ export type Payload = {
   time?: string;    // ← Add this line
   tax?: number;
 };
+
 export type ItemRow = {
   item: string;
   qty: number | "";

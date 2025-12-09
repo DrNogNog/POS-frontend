@@ -10,7 +10,6 @@ import { useAlerts } from "@/lib/AlertsContext";
 
 interface Order {
   id: number;
-  sku: string;
   name: string;
   description?: string | null;
   vendors?: string | null;
@@ -53,12 +52,6 @@ function OrderMoreModal({
           Order More: {product.name}
         </h2>
 
-        {product.style && (
-          <p className="text-lg font-medium text-blue-600 dark:text-blue-400 mb-2">
-            {product.style}
-          </p>
-        )}
-
         {product.description && (
           <p className="text-sm text-gray-600 dark:text-zinc-400 mb-3 italic">
             {product.description}
@@ -95,7 +88,7 @@ function OrderMoreModal({
               min="1"
               value={count}
               onChange={(e) => setCount(Math.max(1, Number(e.target.value) || 1))}
-              className="w-full px-4 py-3 text-lg rounded-lg border border-zinc-300 dark:border-zinc-700 dark:bg-zinc-800 dark:text-white focus:ring-2 focus:ring-blue-500"
+              className="w-full px-4 py-3 text-lg rounded-lg border border-zinc-300 dark:border-zinc-700 dark:bg-zinc-800 dark:text-white"
               autoFocus
             />
           </div>
@@ -125,16 +118,11 @@ export default function ProductsPage() {
   const { updateLowStockAlert } = useAlerts();
   const [products, setProducts] = useState<Product[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
-  const [styleSearch, setStyleSearch] = useState(""); // <-- new: style-only search
   const [activePage, setActivePage] = useState("Item Library");
   const [openIds, setOpenIds] = useState<Set<string>>(new Set());
   const [newName, setNewName] = useState("");
-  const [newStyle, setNewStyle] = useState("");
-  const [newPrice, setNewPrice] = useState("");
   const [newInputCost, setNewInputCost] = useState("");
-  const [newSku, setNewSku] = useState("");
   const [newDescription, setNewDescription] = useState("");
-  const [newCategories, setNewCategories] = useState("");
   const [newVendors, setNewVendors] = useState<string[]>([]);
   const [newStock, setNewStock] = useState("0");
   const [images, setImages] = useState<File[]>([]);
@@ -145,16 +133,13 @@ export default function ProductsPage() {
 
   const allColumns = [
     "Item",
-    "Style",
     "Description",
     "Cost",
-    "SKU",
-    "Price",
-    "Categories",
     "Stock",
     "Vendors",
     "Actions",
   ];
+
   const [visibleColumns, setVisibleColumns] = useState<Set<string>>(new Set(allColumns));
 
   // Load products
@@ -162,19 +147,17 @@ export default function ProductsPage() {
     try {
       const res = await api("/products");
       const data: any[] = Array.isArray(res) ? res : [];
-      const productsWithDefaults: Product[] = data.map((p) => ({
+
+      const normalized: Product[] = data.map((p) => ({
         ...p,
         id: String(p.id),
-        price: Number(p.price || 0),
         inputcost: Number(p.inputcost || 0),
-        style: p.style || "",
         stock: p.stock ?? 0,
-        categories: p.categories ?? "",
         vendors: p.vendors ?? [],
       }));
-      setProducts(productsWithDefaults);
-    } catch (err) {
-      console.error(err);
+
+      setProducts(normalized);
+    } catch {
       setProducts([]);
     }
   };
@@ -183,211 +166,128 @@ export default function ProductsPage() {
     if (activePage === "Item Library") loadProducts();
   }, [activePage]);
 
-  // Filtered products now considers both the general search AND the style-only search
   const filteredProducts = useMemo(() => {
     const query = searchQuery.toLowerCase().trim();
-    const styleQuery = styleSearch.toLowerCase().trim();
+    if (!query) return products;
+    return products.filter((p) =>
+      p.name.toLowerCase().includes(query) ||
+      p.description?.toLowerCase().includes(query) ||
+      p.vendors?.some((v) => v.toLowerCase().includes(query))
+    );
+  }, [searchQuery, products]);
 
-    // if no searches, return all
-    if (!query && !styleQuery) return products;
-
-    return products.filter((p) => {
-      const matchesGeneral =
-        !query ||
-        p.name.toLowerCase().includes(query) ||
-        p.sku?.toLowerCase().includes(query) ||
-        p.categories?.toLowerCase().includes(query) ||
-        p.vendors?.some((v) => v.toLowerCase().includes(query));
-
-      const matchesStyle = !styleQuery || p.style?.toLowerCase().includes(styleQuery);
-
-      // both must match (AND). If you want OR behavior, change to matchesGeneral || matchesStyle
-      return matchesGeneral && matchesStyle;
-    });
-  }, [searchQuery, styleSearch, products]);
-
-  const updateProductInState = (updatedProduct: Product) => {
-    setProducts((prev) => prev.map((p) => (p.id === updatedProduct.id ? updatedProduct : p)));
+  const updateProductInState = (updated: Product) => {
+    setProducts((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
   };
 
   const deleteProduct = async (id: string) => {
     try {
       await fetch(`http://localhost:4000/api/products/${id}`, { method: "DELETE" });
       setProducts((prev) => prev.filter((p) => p.id !== id));
-    } catch (err) {
-      console.error(err);
-    }
+    } catch {}
   };
 
   const duplicateProduct = async (product: Product) => {
     try {
-      const formData = new FormData();
-      formData.append("name", product.name + " (Copy)");
-      formData.append("style", product.style);
-      formData.append("price", product.price.toString());
-      formData.append("inputcost", String(product.inputcost));
-      if (product.sku) formData.append("sku", product.sku);
-      if (product.description) formData.append("description", product.description);
-      if (product.categories) formData.append("categories", product.categories);
-      if (product.stock !== undefined) formData.append("stock", product.stock.toString());
-      if (product.vendors) formData.append("vendors", product.vendors.join(","));
-      if (product.images) product.images.forEach((img) => formData.append("images", img as any));
+      const body = {
+        name: product.name,
+        inputcost: product.inputcost,
+        description: product.description,
+        stock: product.stock,
+        vendors: product.vendors,
+        images: product.images,
+      };
 
-      const res = await fetch("http://localhost:4000/api/products", { method: "POST", body: formData });
-      if (!res.ok) throw new Error("Failed to duplicate product");
-      const newProduct: Product = await res.json();
-      newProduct.id = String(newProduct.id);
-      setProducts((prev) => [...prev, newProduct]);
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  const editProduct = async (updatedProduct: Product) => {
-    try {
-      const formData = new FormData();
-      formData.append("name", updatedProduct.name);
-      formData.append("style", updatedProduct.style);
-      formData.append("price", updatedProduct.price.toString());
-      formData.append("inputcost", String(updatedProduct.inputcost));
-      if (updatedProduct.sku) formData.append("sku", updatedProduct.sku);
-      if (updatedProduct.description) formData.append("description", updatedProduct.description || "");
-      if (updatedProduct.categories) formData.append("categories", updatedProduct.categories);
-      if (updatedProduct.stock !== undefined) formData.append("stock", updatedProduct.stock.toString());
-      if (updatedProduct.vendors) formData.append("vendors", updatedProduct.vendors.join(","));
-      if (updatedProduct.images) updatedProduct.images.forEach((img) => formData.append("images", img as any));
-
-      const res = await fetch(`http://localhost:4000/api/products/${updatedProduct.id}`, {
-        method: "PUT",
-        body: formData,
+      const res = await fetch("http://localhost:4000/api/products/duplicate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
       });
 
-      if (!res.ok) throw new Error("Failed to update product");
-      const savedProduct: Product = await res.json();
-      savedProduct.id = String(savedProduct.id);
-      updateProductInState(savedProduct);
-    } catch (err) {
-      console.error(err);
-      alert("Failed to save changes to the product.");
+      const newProduct = await res.json();
+      newProduct.id = String(newProduct.id);
+
+      setProducts((prev) => [...prev, newProduct]);
+    } catch {}
+  };
+
+  const editProduct = async (product: Product) => {
+    try {
+      const form = new FormData();
+      form.append("name", product.name);
+      form.append("inputcost", String(product.inputcost));
+      if (product.description) form.append("description", product.description);
+      if (product.stock !== undefined) form.append("stock", product.stock.toString());
+      if (product.vendors) form.append("vendors", product.vendors.join(","));
+      if (product.images) product.images.forEach((img) => form.append("images", img as any));
+
+      const res = await fetch(`http://localhost:4000/api/products/${product.id}`, {
+        method: "PUT",
+        body: form,
+      });
+
+      const saved = await res.json();
+      saved.id = String(saved.id);
+      updateProductInState(saved);
+    } catch {
+      alert("Failed to update product");
     }
   };
 
-  // OrderMore modal handling
-  const orderMore = (product: Product) => setOrderModalProduct(product);
+  const orderMore = (p: Product) => setOrderModalProduct(p);
   const closeOrderModal = () => setOrderModalProduct(null);
 
   const handleOrderMoreSubmit = async (product: Product, count: number) => {
-    if (!product || count < 1) return;
-
+    if (!product) return;
     try {
-      // Just update the product with the new needToOrder value
-      const response = await fetch(`http://localhost:4000/api/products/needToOrder/${product.id}`, {
-        method: "PATCH", // or "PUT" if your backend prefers
+      await fetch(`http://localhost:4000/api/products/needToOrder/${product.id}`, {
+        method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          needToOrder: count, // This assumes you already added this field in your DB
-        }),
+        body: JSON.stringify({ needToOrder: count }),
       });
-      if (!response.ok) {
-        throw new Error("Failed to update needToOrder");
-      }
-
-      // Update the product in local state so UI updates instantly
       setProducts((prev) =>
-        prev.map((p) =>
-          p.id === product.id ? { ...p, needToOrder: count } : p
-        )
+        prev.map((p) => (p.id === product.id ? { ...p, needToOrder: count } : p))
       );
-      setOrderModalProduct(null); // close modal
-    } catch (err) {
-      console.error(err);
-      alert("Failed to save. Check console.");
+      closeOrderModal();
+    } catch {
+      alert("Failed to save");
     }
   };
 
-  const setNonTaxable = (id: string) => console.log("Set non-taxable", id);
-
-  const archiveProduct = async (id: string) => {
-    // ... (unchanged)
-  };
-
-  const modalOpen = () => setIsModalOpen(true);
-  const modalClose = () => {
-    setIsModalOpen(false);
-    setImages([]);
-  };
-
-  const handleFiles = (files: FileList | null) => {
-    if (!files) return;
-    setImages((prev) => [...prev, ...Array.from(files)]);
-  };
-
-  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    handleFiles(e.dataTransfer.files);
-  };
-
-  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => e.preventDefault();
-
   const createProduct = async () => {
-    if (!newName.trim() || !newPrice.trim() || !newInputCost.trim()) {
-      alert("Name, Price, and Cost are required.");
+    if (!newName.trim() || !newInputCost.trim()) {
+      alert("Name and Cost are required.");
       return;
     }
 
     const formData = new FormData();
     formData.append("name", newName.trim());
-    formData.append("style", newStyle.trim());
-    formData.append("price", newPrice.trim());
     formData.append("inputcost", newInputCost.trim());
-    formData.append("stock", newStock || "0");
-    formData.append("needToOrder", "0"); // keep the field used by modal/back-end, hidden in UI
-
-    if (newSku.trim()) formData.append("sku", newSku.trim());
+    formData.append("stock", newStock);
+    formData.append("needToOrder", "0");
     if (newDescription.trim()) formData.append("description", newDescription.trim());
-    if (newCategories.trim()) formData.append("categories", newCategories.trim());
     if (newVendors.length > 0) formData.append("vendors", newVendors.join(","));
-
     images.forEach((img) => formData.append("images", img));
-    console.log("HELP FormData contents:");
-    formData.forEach((value, key) => {
-      console.log(key, value);
-    });
+
     try {
       const res = await fetch("http://localhost:4000/api/products", {
         method: "POST",
         body: formData,
       });
+      const created = await res.json();
+      created.id = String(created.id);
 
-      if (!res.ok) {
-        const error = await res.json().catch(() => ({}));
-        throw new Error(error.message || "Failed to create product");
-      }
-
-      const newProduct: Product = await res.json();
-      newProduct.id = String(newProduct.id);
-
-      // Add to list + refresh
-      setProducts((prev) => [...prev, newProduct]);
-      loadProducts(); // optional: refresh from server
-
-      // Reset form
+      setProducts((prev) => [...prev, created]);
+      loadProducts();
       setNewName("");
-      setNewStyle("");
-      setNewPrice("");
       setNewInputCost("");
-      setNewSku("");
       setNewDescription("");
-      setNewCategories("");
       setNewVendors([]);
       setNewStock("0");
       setImages([]);
-      modalClose();
-
-      alert("Product created successfully!");
-    } catch (err: any) {
-      console.error(err);
-      alert("Failed to save product: " + err.message);
+      setIsModalOpen(false);
+    } catch {
+      alert("Failed to save product");
     }
   };
 
@@ -400,8 +300,13 @@ export default function ProductsPage() {
             <h1 className="text-3xl font-bold mb-8">Item Library</h1>
 
             <div className="max-w-md mx-auto bg-white dark:bg-zinc-900 p-6 rounded-2xl shadow-lg mb-6 flex flex-col items-center gap-4">
-              <h2 className="text-xl font-semibold dark:text-white text-center">Your Item Library</h2>
-              <button className="bg-blue-600 text-white px-8 py-3 rounded hover:bg-blue-700" onClick={modalOpen}>
+              <h2 className="text-xl font-semibold dark:text-white text-center">
+                Your Item Library
+              </h2>
+              <button
+                className="bg-blue-600 text-white px-8 py-3 rounded hover:bg-blue-700"
+                onClick={() => setIsModalOpen(true)}
+              >
                 Create an Item
               </button>
             </div>
@@ -409,51 +314,44 @@ export default function ProductsPage() {
             <div className="max-w-md mx-auto mb-4 space-y-2">
               <input
                 type="text"
-                placeholder="Search by name, SKU, category, or vendor..."
+                placeholder="Search by name, description, or vendor..."
                 className="w-full px-4 py-3 rounded-lg border border-zinc-300 dark:border-zinc-700 dark:bg-zinc-800 dark:text-white"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-              />
-              <input
-                type="text"
-                placeholder="Search by style..."
-                className="w-full px-4 py-3 rounded-lg border border-zinc-300 dark:border-zinc-700 dark:bg-zinc-800 dark:text-white"
-                value={styleSearch}
-                onChange={(e) => setStyleSearch(e.target.value)}
               />
             </div>
 
             <ProductModal
               isOpen={isModalOpen}
-              close={modalClose}
+              close={() => setIsModalOpen(false)}
               createProduct={createProduct}
               newName={newName}
               setNewName={setNewName}
-              newStyle={newStyle}
-              setNewStyle={setNewStyle}
-              newPrice={newPrice}
-              setNewPrice={setNewPrice}
               newInputCost={newInputCost}
               setNewInputCost={setNewInputCost}
-              newSku={newSku}
-              setNewSku={setNewSku}
               newDescription={newDescription}
               setNewDescription={setNewDescription}
-              newCategories={newCategories}
-              setNewCategories={setNewCategories}
               newVendors={newVendors}
               setNewVendors={setNewVendors}
               newStock={newStock}
               setNewStock={setNewStock}
               images={images}
               setImages={setImages}
-              handleFiles={handleFiles}
-              handleDrop={handleDrop}
-              handleDragOver={handleDragOver}
+              handleFiles={(f) => setImages([...images, ...Array.from(f || [])])}
+              handleDrop={(e) => {
+                e.preventDefault();
+                const files = e.dataTransfer.files;
+                setImages([...images, ...Array.from(files)]);
+              }}
+              handleDragOver={(e) => e.preventDefault()}
             />
 
             <div className="flex justify-end mb-4">
-              <ColumnDropdown options={allColumns} selected={visibleColumns} setSelected={setVisibleColumns} />
+              <ColumnDropdown
+                options={allColumns}
+                selected={visibleColumns}
+                setSelected={setVisibleColumns}
+              />
             </div>
 
             <div className="bg-white dark:bg-zinc-900 rounded-xl shadow-xl border">
@@ -465,7 +363,9 @@ export default function ProductsPage() {
                         visibleColumns.has(col) ? (
                           <th
                             key={col}
-                            className={`px-6 py-4 ${col === "Price" || col === "Stock" || col === "Cost" ? "text-right" : "text-left"}`}
+                            className={`px-6 py-4 ${
+                              col === "Stock" || col === "Cost" ? "text-right" : "text-left"
+                            }`}
                           >
                             {col}
                           </th>
@@ -473,30 +373,21 @@ export default function ProductsPage() {
                       )}
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-zinc-200 dark:divide-zinc-700">
-                    {filteredProducts.length === 0 ? (
-                      <tr>
-                        <td colSpan={allColumns.length} className="px-6 py-12 text-center text-zinc-500 dark:text-zinc-400">
-                          No products found.
-                        </td>
-                      </tr>
-                    ) : (
-                      filteredProducts.map((p) => (
-                        <ProductTableRow
-                          key={p.id}
-                          product={p}
-                          visibleColumns={visibleColumns}
-                          editProduct={editProduct}
-                          duplicateProduct={duplicateProduct}
-                          deleteProduct={deleteProduct}
-                          orderMore={() => orderMore(p)}
-                          setNonTaxable={setNonTaxable}
-                          archiveProduct={archiveProduct}
-                          updateLowStockAlert={updateLowStockAlert}
-                          rowClassName="py-6"
-                        />
-                      ))
-                    )}
+                  <tbody>
+                    {filteredProducts.map((product) => (
+                      <ProductTableRow
+                        key={product.id}
+                        product={product}
+                        visibleColumns={visibleColumns}
+                        deleteProduct={deleteProduct}
+                        duplicateProduct={duplicateProduct}
+                        editProduct={editProduct}
+                        orderMore={() => orderMore(product)}
+                        setNonTaxable={(id) => console.log("setNonTaxable", id)}
+                        archiveProduct={(id) => console.log("archiveProduct", id)}
+                        updateLowStockAlert={updateLowStockAlert}
+                      />
+                    ))}
                   </tbody>
                 </table>
               </div>
