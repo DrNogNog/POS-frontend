@@ -3,7 +3,7 @@
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import { Payload } from "@/types/estimate";
 
-export async function generateInvoicePdf(data: Payload) {
+export async function generateInvoicePdf(data: Payload): Promise<Uint8Array> {
   const doc = await PDFDocument.create();
   const page = doc.addPage([612, 792]);
   const font = await doc.embedFont(StandardFonts.Helvetica);
@@ -53,6 +53,7 @@ export async function generateInvoicePdf(data: Payload) {
   const boxWidth = (width - 3 * margin) / 2;
   const boxHeight = 90;
 
+  // Bill To
   page.drawRectangle({
     x: margin,
     y: y - boxHeight,
@@ -61,9 +62,10 @@ export async function generateInvoicePdf(data: Payload) {
     borderWidth: 1.5,
     borderColor: rgb(0, 0, 0),
   });
-  page.drawText("Bill To:", { x: margin + 12, y: y - 20, size: 13, font: bold, color: rgb(0, 0, 0) });
+  page.drawText("Bill To:", { x: margin + 12, y: y - 20, size: 13, font: bold });
   drawLines(page, data.billTo || "", margin + 12, y - 45, font);
 
+  // Ship To
   page.drawRectangle({
     x: margin + boxWidth + margin,
     y: y - boxHeight,
@@ -72,7 +74,7 @@ export async function generateInvoicePdf(data: Payload) {
     borderWidth: 1.5,
     borderColor: rgb(0, 0, 0),
   });
-  page.drawText("Ship To:", { x: margin + boxWidth + margin + 12, y: y - 20, size: 13, font: bold, color: rgb(0, 0, 0) });
+  page.drawText("Ship To:", { x: margin + boxWidth + margin + 12, y: y - 20, size: 13, font: bold });
   drawLines(page, data.shipTo || data.billTo || "", margin + boxWidth + margin + 12, y - 45, font);
 
   // === TABLE ===
@@ -90,32 +92,37 @@ export async function generateInvoicePdf(data: Payload) {
     color: rgb(0.88, 0.88, 0.88),
   });
 
-  const headers = ["SKU", "Description", "Qty", "Rate", "Amount"];
+  const headers = ["Item", "Description", "Qty", "Price", "Amount"];
   headers.forEach((h, i) => {
-    page.drawText(h, { x: x + 12, y: tableTop - 22, size: 12, font: bold, color: rgb(0, 0, 0) });
+    page.drawText(h, { x: x + 12, y: tableTop - 22, size: 12, font: bold });
     x += colWidths[i];
   });
 
   y = tableTop - 65;
-
-  // Items
   let calculatedSubtotal = 0;
+
   for (const item of data.items) {
-    x = margin;
-    const qty = typeof item.qty === "number" ? item.qty : 1;
-    const rate = typeof item.rate === "number" ? item.rate : 0;
+    const qty = Number(item.qty) || 1;
+    const rate = Number(item.rate) || 0;
     const amount = qty * rate;
     calculatedSubtotal += amount;
 
-    page.drawText(item.sku || "N/A", { x: x + 12, y, size: 11, font, color: rgb(0, 0, 0) });
+    x = margin;
+
+    // Fixed: productId is number → convert to string
+    page.drawText(item.productId?.toString() || "", { x: x + 12, y, size: 11, font });
     x += colWidths[0];
-    page.drawText(item.description, { x: x + 12, y, size: 11, font, color: rgb(0, 0, 0) });
+
+    page.drawText(item.description || "", { x: x + 12, y, size: 11, font });
     x += colWidths[1];
-    page.drawText(qty.toString(), { x: x + 25, y, size: 11, font, color: rgb(0, 0, 0) });
+
+    page.drawText(qty.toString(), { x: x + 25, y, size: 11, font });
     x += colWidths[2];
-    page.drawText(`$${rate.toFixed(2)}`, { x: x + 12, y, size: 11, font, color: rgb(0, 0, 0) });
+
+    page.drawText(`$${rate.toFixed(2)}`, { x: x + 12, y, size: 11, font });
     x += colWidths[3];
-    page.drawText(`$${amount.toFixed(2)}`, { x: x + 12, y, size: 11, font, color: rgb(0, 0, 0) });
+
+    page.drawText(`$${amount.toFixed(2)}`, { x: x + 12, y, size: 11, font });
 
     y -= 30;
   }
@@ -129,11 +136,11 @@ export async function generateInvoicePdf(data: Payload) {
 
   // === FOOTER ===
   y -= 60;
-  page.drawText(`DATE: ${data.date}`, { x: margin, y, size: 12, font: bold, color: rgb(0, 0, 0) });
+  page.drawText(`DATE: ${data.date}`, { x: margin, y, size: 12, font: bold });
   y -= 24;
-  page.drawText(`SALESMAN: ${data.salesman || "LIVIA"}`, { x: margin, y, size: 12, font, color: rgb(0, 0, 0) });
+  page.drawText(`SALESMAN: ${data.salesman || "LIVIA"}`, { x: margin, y, size: 12, font });
   y -= 24;
-  page.drawText(`TIME: ${data.time}`, { x: margin, y, size: 12, font, color: rgb(0, 0, 0) });
+  page.drawText(`TIME: ${data.time}`, { x: margin, y, size: 12, font });
 
   page.drawText("THANK YOU FOR SHOPPING", {
     x: margin,
@@ -143,45 +150,48 @@ export async function generateInvoicePdf(data: Payload) {
     color: rgb(0.8, 0, 0),
   });
 
- // === TOTALS BOX ===
-const totalBoxWidth = 200;
-const totalBoxHeight = 80;
-const totalBoxX = width - margin - totalBoxWidth;
-const totalBoxY = 10; // fixed Y, near bottom of page
+  // === TOTALS BOX ===
+  const totalBoxWidth = 200;
+  const totalBoxHeight = 100;
+  const totalBoxX = width - margin - totalBoxWidth;
+  const totalBoxY = 60;
 
-page.drawRectangle({
-  x: totalBoxX,
-  y: totalBoxY,
-  width: totalBoxWidth,
-  height: totalBoxHeight,
-  borderWidth: 2,
-  borderColor: rgb(0, 0, 0),
-});
+  page.drawRectangle({
+    x: totalBoxX,
+    y: totalBoxY,
+    width: totalBoxWidth,
+    height: totalBoxHeight,
+    borderWidth: 2,
+    borderColor: rgb(0, 0, 0),
+  });
 
-let ty = totalBoxY + totalBoxHeight - 20;
+  let ty = totalBoxY + totalBoxHeight - 25;
 
-// Use the subtotal you already calculated in the items loop
-const nySalesTaxRate = 0.08875; // 8.875%
-calculatedSubtotal = calculatedSubtotal - data.discount;
-const calculatedTax = +(calculatedSubtotal * nySalesTaxRate).toFixed(2);
-const discount = Number(data.discount);
+  const nySalesTaxRate = 0.08875;
+  const subtotalAfterDiscount = calculatedSubtotal - (data.discount || 0);
+  const tax = Number((subtotalAfterDiscount * nySalesTaxRate).toFixed(2));
+  const total = subtotalAfterDiscount + tax;
 
-const calculatedTotal = calculatedSubtotal+calculatedTax;
+  page.drawText("Subtotal", { x: totalBoxX + 10, y: ty, size: 13, font });
+  page.drawText(`$${subtotalAfterDiscount.toFixed(2)}`, { x: totalBoxX + 120, y: ty, size: 13, font });
+  ty -= 28;
 
+  if (data.discount && data.discount > 0) {
+    page.drawText("Discount", { x: totalBoxX + 10, y: ty, size: 13, font });
+    page.drawText(`-$${data.discount.toFixed(2)}`, { x: totalBoxX + 120, y: ty, size: 13, font });
+    ty -= 28;
+  }
 
-page.drawText("Subtotal", { x: totalBoxX + 10, y: ty, size: 13, font, color: rgb(0, 0, 0) });
-page.drawText(`$${calculatedSubtotal.toFixed(2)}`, { x: totalBoxX + 120, y: ty, size: 13, font, color: rgb(0, 0, 0) });
+  page.drawText("Tax (8.875%)", { x: totalBoxX + 10, y: ty, size: 13, font });
+  page.drawText(`$${tax.toFixed(2)}`, { x: totalBoxX + 120, y: ty, size: 13, font });
+  ty -= 35;
 
-ty -= 25;
-page.drawText("Tax", { x: totalBoxX + 10, y: ty, size: 13, font, color: rgb(0, 0, 0) });
-page.drawText(`$${calculatedTax.toFixed(2)}`, { x: totalBoxX + 120, y: ty, size: 13, font, color: rgb(0, 0, 0) });
+  page.drawText("TOTAL", { x: totalBoxX + 10, y: ty, size: 18, font: bold });
+  page.drawText(`$${total.toFixed(2)}`, { x: totalBoxX + 110, y: ty, size: 20, font: bold });
 
-ty -= 30;
-page.drawText("TOTAL", { x: totalBoxX + 10, y: ty, size: 16, font: bold, color: rgb(0, 0, 0) });
-page.drawText(`$${calculatedTotal.toFixed(2)}`, { x: totalBoxX + 120, y: ty, size: 18, font: bold, color: rgb(0, 0, 0) });
-
-  // === SAVE PDF ===
+  // === FINALIZE & DOWNLOAD ===
   const pdfBytes = await doc.save();
+
   const blob = new Blob([new Uint8Array(pdfBytes)], { type: "application/pdf" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
@@ -189,9 +199,11 @@ page.drawText(`$${calculatedTotal.toFixed(2)}`, { x: totalBoxX + 120, y: ty, siz
   a.download = `invoice-${data.invoiceNo}.pdf`;
   a.click();
   URL.revokeObjectURL(url);
-  return pdfBytes; // <–– return the bytes
+
+  return pdfBytes;
 }
 
+// Helper function
 function drawLines(page: any, text: string, x: number, yStart: number, font: any) {
   const lines = (text || "").split("\n").filter(Boolean);
   let y = yStart;

@@ -81,7 +81,7 @@ export async function generateBillingPdf(
 
   // Header
   page.drawRectangle({ x: margin, y: tableTop - 25, width: width - 2 * margin, height: 25, color: rgb(0.9, 0.9, 0.9) });
-  const headers = ["Item", "Qty", "Description", "Rate", "Total"];
+  const headers = ["Item", "Qty", "Description", "Price", "Total"];
   const colWidths = [80, 60, 220, 80, 100];
   let x = margin;
   headers.forEach((h, i) => {

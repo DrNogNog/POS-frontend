@@ -15,11 +15,13 @@ interface ImageItem {
   src: string;
   name: string;
   description?: string;
-  filename: string; // original filename (important!)
+  filename: string;
 }
 
 export default function ImageLibraryPage() {
   const [images, setImages] = useState<ImageItem[]>([]);
+  const [filteredImages, setFilteredImages] = useState<ImageItem[]>([]);
+  const [searchQuery, setSearchQuery] = useState("");
   const [popupImage, setPopupImage] = useState<ImageItem | null>(null);
   const [updatingImage, setUpdatingImage] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -34,10 +36,11 @@ export default function ImageLibraryPage() {
             src: `http://localhost:4000/uploads/${encodeURIComponent(filename)}`,
             name: p.name,
             description: p.description,
-            filename, // keep original filename
+            filename,
           }))
         );
         setImages(allImages);
+        setFilteredImages(allImages); // initial full list
       } catch (err) {
         console.error(err);
       }
@@ -45,63 +48,72 @@ export default function ImageLibraryPage() {
     loadProducts();
   }, []);
 
-  // Handle image update
-const handleImageUpdate = async (oldFilename: string, newFile: File) => {
-  if (!newFile.type.startsWith("image/")) {
-    alert("Please select an image file");
-    return;
-  }
-
-  setUpdatingImage(oldFilename);
-
-  const formData = new FormData();
-  formData.append("newImage", newFile);
-  formData.append("oldFilename", oldFilename);
-
-  try {
-    const res = await fetch("http://localhost:4000/api/products/updateImage", {
-      method: "PATCH",
-      body: formData,
-      credentials: "include",   // This sends cookies
-      mode: "cors",             // Explicitly allow CORS
-    });
-
-    if (!res.ok) {
-      const text = await res.text();
-      console.error("Server responded with:", res.status, text);
-      throw new Error(`Server error: ${res.status} ${text.substring(0, 200)}`);
+  // Search filter
+  useEffect(() => {
+    if (!searchQuery.trim()) {
+      setFilteredImages(images);
+      return;
     }
 
-    const data = await res.json();
-
-    // Update UI
-    const newFilename = data.src.split("/").pop()!;
-    const newSrc = `http://localhost:4000/uploads/${encodeURIComponent(newFilename)}`;
-
-    setImages(prev =>
-      prev.map(img =>
-        img.filename === oldFilename
-          ? { ...img, src: newSrc, filename: newFilename }
-          : img
-      )
+    const query = searchQuery.toLowerCase();
+    const filtered = images.filter(
+      (img) =>
+        img.name.toLowerCase().includes(query) ||
+        img.description?.toLowerCase().includes(query) ||
+        img.filename.toLowerCase().includes(query)
     );
+    setFilteredImages(filtered);
+  }, [searchQuery, images]);
 
-    if (popupImage?.filename === oldFilename) {
-      setPopupImage({ ...popupImage, src: newSrc });
+  // Handle image update (unchanged)
+  const handleImageUpdate = async (oldFilename: string, newFile: File) => {
+    if (!newFile.type.startsWith("image/")) {
+      alert("Please select an image file");
+      return;
     }
 
-    alert("Image replaced successfully!");
+    setUpdatingImage(oldFilename);
 
-  } catch (err: any) {
-    console.error("Upload failed:", err);
-    alert("Failed to update image. Are you logged in? Check console.");
-  } finally {
-    setUpdatingImage(null);
-    if (fileInputRef.current) fileInputRef.current.value = "";
-  }
-};
+    const formData = new FormData();
+    formData.append("newImage", newFile);
+    formData.append("oldFilename", oldFilename);
 
-  // Trigger file input
+    try {
+      const res = await fetch("http://localhost:4000/api/products/updateImage", {
+        method: "PATCH",
+        body: formData,
+        credentials: "include",
+        mode: "cors",
+      });
+
+      if (!res.ok) throw new Error(`Server error: ${res.status}`);
+
+      const data = await res.json();
+      const newFilename = data.src.split("/").pop()!;
+      const newSrc = `http://localhost:4000/uploads/${encodeURIComponent(newFilename)}`;
+
+      setImages((prev) =>
+        prev.map((img) =>
+          img.filename === oldFilename
+            ? { ...img, src: newSrc, filename: newFilename }
+            : img
+        )
+      );
+
+      if (popupImage?.filename === oldFilename) {
+        setPopupImage({ ...popupImage, src: newSrc });
+      }
+
+      alert("Image replaced successfully!");
+    } catch (err: any) {
+      console.error("Upload failed:", err);
+      alert("Failed to update image. Are you logged in?");
+    } finally {
+      setUpdatingImage(null);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
   const triggerFileInput = (filename: string) => {
     if (fileInputRef.current) {
       fileInputRef.current.dataset.target = filename;
@@ -109,7 +121,6 @@ const handleImageUpdate = async (oldFilename: string, newFile: File) => {
     }
   };
 
-  // Handle file selection
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     const targetFilename = e.target.dataset.target;
@@ -151,58 +162,106 @@ const handleImageUpdate = async (oldFilename: string, newFile: File) => {
       <div className="flex min-h-screen bg-zinc-100 dark:bg-black">
         <Sidebar />
 
-        {/* Main gallery area */}
-        <main className="flex-1 flex items-center justify-center p-10">
+        {/* Main content */}
+        <main className="flex-1 p-10">
+          {/* Search Bar */}
+          <div className="max-w-2xl mx-auto mb-10">
+            <div className="relative">
+              <input
+                type="text"
+                placeholder="Search by product name, description, or filename..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full px-12 py-4 text-lg rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-white shadow-lg focus:outline-none focus:ring-4 focus:ring-blue-500/30 transition-all"
+              />
+              <svg
+                className="absolute left-4 top-1/2 -translate-y-1/2 w-6 h-6 text-gray-500"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                />
+              </svg>
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery("")}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              )}
+            </div>
+            {searchQuery && (
+              <p className="text-center mt-3 text-gray-600 dark:text-gray-400">
+                Found {filteredImages.length} image{filteredImages.length !== 1 ? "s" : ""}
+              </p>
+            )}
+          </div>
+
+          {/* Gallery */}
           <div className={styles.startedx}>
             <div className={styles.containerx}>
-              {Array.from({ length: Math.ceil(images.length / 3) }).map((_, rowIdx) => (
-                <div className={styles.row} key={rowIdx}>
-                  {images.slice(rowIdx * 3, rowIdx * 3 + 3).map((item, i) => (
-                    <div key={i} className="relative flex flex-col items-center gap-3 group">
-                      {/* Image with hover overlay */}
-                      <div className="relative">
-                        <img
-                          className={`${styles.hellox} cursor-pointer transition-all group-hover:brightness-75`}
-                          src={item.src}
-                          alt={item.name}
-                          onClick={() => setPopupImage(item)}
-                        />
-
-                        {/* Replace Button on Hover */}
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            triggerFileInput(item.filename);
-                          }}
-                          disabled={updatingImage === item.filename}
-                          className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-300 bg-black/50 text-white font-medium text-sm px-4 py-2 rounded-lg backdrop-blur-sm hover:bg-black/70 disabled:opacity-70"
-                        >
-                          {updatingImage === item.filename ? (
-                            <span className="flex items-center gap-2">
-                              <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
-                                <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" opacity="0.3" />
-                                <path fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
-                              </svg>
-                              Updating...
-                            </span>
-                          ) : (
-                            "Replace Image"
-                          )}
-                        </button>
-                      </div>
-
-                      <div className="text-center text-white dark:text-white max-w-xs">
-                        <div className="font-semibold truncate block">{item.name}</div>
-                        {item.description && <div className="text-sm opacity-80">{item.description}</div>}
-                      </div>
-                    </div>
-                  ))}
+              {filteredImages.length === 0 ? (
+                <div className="col-span-3 text-center py-20">
+                  <p className="text-2xl text-gray-500 dark:text-gray-400">
+                    {searchQuery ? "No images found matching your search." : "No images available."}
+                  </p>
                 </div>
-              ))}
+              ) : (
+                Array.from({ length: Math.ceil(filteredImages.length / 3) }).map((_, rowIdx) => (
+                  <div className={styles.row} key={rowIdx}>
+                    {filteredImages.slice(rowIdx * 3, rowIdx * 3 + 3).map((item, i) => (
+                      <div key={i} className="relative flex flex-col items-center gap-3 group">
+                        <div className="relative">
+                          <img
+                            className={`${styles.hellox} cursor-pointer transition-all group-hover:brightness-75`}
+                            src={item.src}
+                            alt={item.name}
+                            onClick={() => setPopupImage(item)}
+                          />
+
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              triggerFileInput(item.filename);
+                            }}
+                            disabled={updatingImage === item.filename}
+                            className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-300 bg-black/50 text-white font-medium text-sm px-4 py-2 rounded-lg backdrop-blur-sm hover:bg-black/70 disabled:opacity-70"
+                          >
+                            {updatingImage === item.filename ? (
+                              <span className="flex items-center gap-2">
+                                <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                                  <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" opacity="0.3" />
+                                  <path fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+                                </svg>
+                                Updating...
+                              </span>
+                            ) : (
+                              "Replace Image"
+                            )}
+                          </button>
+                        </div>
+
+                        <div className="text-center text-white dark:text-white max-w-xs">
+                          <div className="font-semibold truncate block">{item.name}</div>
+                          {item.description && <div className="text-sm opacity-80">{item.description}</div>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ))
+              )}
             </div>
           </div>
 
-          {/* POPUP */}
+          {/* POPUP (unchanged) */}
           {popupImage && (
             <div
               className={`${styles.PopDiv} ${styles.PopDivActive} flex flex-col items-center justify-center`}
@@ -216,7 +275,6 @@ const handleImageUpdate = async (oldFilename: string, newFile: File) => {
                   className="max-w-full max-h-96 object-contain rounded-lg shadow-2xl"
                 />
 
-                {/* Replace button in popup */}
                 <button
                   onClick={() => triggerFileInput(popupImage.filename)}
                   disabled={updatingImage === popupImage.filename}

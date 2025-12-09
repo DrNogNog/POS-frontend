@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Sidebar from "@/components/sidebar";
-import { Search, DollarSign, TrendingUp, AlertCircle } from "lucide-react";
+import { Search, DollarSign, TrendingUp, AlertCircle, Calendar } from "lucide-react";
 
 interface Invoice {
   id: string;
@@ -12,6 +12,7 @@ interface Invoice {
   overdueAmount?: number;
   paidAmount?: number;
   status?: "Paid" | "Pending" | "Overdue" | "Partially Paid" | "Draft";
+  date?: string; // <-- Make sure your backend returns this!
 }
 
 export default function AccountsReceivablePage() {
@@ -19,30 +20,31 @@ export default function AccountsReceivablePage() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [filterStatus, setFilterStatus] = useState<string>("all");
+  const [selectedQuarter, setSelectedQuarter] = useState<string>("all");
 
   useEffect(() => {
     fetchInvoices();
   }, []);
-  async function updateStatus(id: string, newStatus: Invoice["status"]) {
-  try {
-    // Optimistic UI update
-    setInvoices((prev) =>
-      prev.map((inv) =>
-        inv.id === id ? { ...inv, status: newStatus } : inv
-      )
-    );
 
-    await fetch(`http://localhost:4000/api/invoices/${id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status: newStatus }),
-    });
-  } catch (err) {
-    console.error("Failed to update invoice status", err);
-    alert("Error updating invoice status");
-    fetchInvoices(); // restore remote version
+  async function updateStatus(id: string, newStatus: Invoice["status"]) {
+    try {
+      setInvoices((prev) =>
+        prev.map((inv) =>
+          inv.id === id ? { ...inv, status: newStatus } : inv
+        )
+      );
+
+      await fetch(`http://localhost:4000/api/invoices/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: newStatus }),
+      });
+    } catch (err) {
+      console.error("Failed to update invoice status", err);
+      alert("Error updating invoice status");
+      fetchInvoices();
+    }
   }
-}
 
   async function fetchInvoices() {
     try {
@@ -57,21 +59,27 @@ export default function AccountsReceivablePage() {
       setLoading(false);
     }
   }
-  console.log("helllo",invoices);
+
+  // Get quarter from date string (e.g. "2025-03-15")
+  const getQuarter = (dateStr: string | undefined): string => {
+    if (!dateStr) return "all";
+    const date = new Date(dateStr);
+    const month = date.getMonth() + 1;
+    if (month <= 3) return "Q1";
+    if (month <= 6) return "Q2";
+    if (month <= 9) return "Q3";
+    return "Q4";
+  };
+
   // Calculations
   const totalReceivable = invoices.reduce((sum, r) => {
-  const amount = Number(r.total) || 0;
-  const paid = Number(r.paidAmount) || 0;
+    const amount = Number(r.total) || 0;
+    const paid = Number(r.paidAmount) || 0;
 
-  if (r.status === "Paid") return sum;
-
-  if (r.status === "Partially Paid") {
-    return sum + Math.max(amount - paid, 0);
-  }
-
-  // For Unpaid, Overdue, Draft, etc.
-  return sum + amount;
-}, 0);
+    if (r.status === "Paid") return sum;
+    if (r.status === "Partially Paid") return sum + Math.max(amount - paid, 0);
+    return sum + amount;
+  }, 0);
 
   const overdueAmount = invoices
     .filter((r) => r.status === "Overdue")
@@ -81,17 +89,24 @@ export default function AccountsReceivablePage() {
     .filter((r) => r.status === "Paid")
     .reduce((sum, r) => sum + (r.paidAmount ?? 0), 0);
 
+  // Filtering logic
   const filtered = invoices.filter((item) => {
     const customer = item.customer ?? "";
+    const invoiceNo = item.invoiceNo ?? "";
     const status = item.status ?? "";
+    const quarter = getQuarter(item.date);
 
     const matchesSearch =
-      customer.toLowerCase().includes(searchTerm.toLowerCase())
+      customer.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      invoiceNo.toLowerCase().includes(searchTerm.toLowerCase());
 
-    const matchesFilter =
+    const matchesStatus =
       filterStatus === "all" || status.toLowerCase() === filterStatus.toLowerCase();
 
-    return matchesSearch && matchesFilter;
+    const matchesQuarter =
+      selectedQuarter === "all" || quarter === selectedQuarter;
+
+    return matchesSearch && matchesStatus && matchesQuarter;
   });
 
   return (
@@ -110,6 +125,7 @@ export default function AccountsReceivablePage() {
 
         {/* Summary Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+          {/* ... your 4 cards unchanged ... */}
           <div className="bg-white dark:bg-zinc-900 rounded-xl shadow-sm p-6 border border-gray-200 dark:border-zinc-800">
             <div className="flex items-center justify-between">
               <div>
@@ -167,17 +183,52 @@ export default function AccountsReceivablePage() {
           </div>
         </div>
 
-        {/* Toolbar */}
+        {/* Toolbar with Search + Status + Quarter Filter */}
         <div className="bg-white dark:bg-zinc-900 rounded-xl shadow-sm border border-gray-200 dark:border-zinc-800 p-6 mb-6">
-          <div className="relative flex-1 max-w-md">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
-            <input
-              type="text"
-              placeholder="Search customers or invoice number..."
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-zinc-700 rounded-lg bg-gray-50 dark:bg-zinc-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
+          <div className="flex flex-col lg:flex-row gap-4 items-center justify-between">
+            {/* Search */}
+            <div className="relative flex-1 max-w-md">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
+              <input
+                type="text"
+                placeholder="Search customers or invoice number..."
+                className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-zinc-700 rounded-lg bg-gray-50 dark:bg-zinc-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+            </div>
+
+            <div className="flex gap-4">
+              {/* Status Filter */}
+              <select
+                value={filterStatus}
+                onChange={(e) => setFilterStatus(e.target.value)}
+                className="px-4 py-2 border border-gray-300 dark:border-zinc-700 rounded-lg bg-gray-50 dark:bg-zinc-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="all">All Status</option>
+                <option value="paid">Paid</option>
+                <option value="pending">Pending</option>
+                <option value="overdue">Overdue</option>
+                <option value="partially paid">Partially Paid</option>
+                <option value="draft">Draft</option>
+              </select>
+
+              {/* Quarter Filter */}
+              <div className="relative">
+                <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5 pointer-events-none" />
+                <select
+                  value={selectedQuarter}
+                  onChange={(e) => setSelectedQuarter(e.target.value)}
+                  className="pl-10 pr-8 py-2 border border-gray-300 dark:border-zinc-700 rounded-lg bg-gray-50 dark:bg-zinc-800 focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none"
+                >
+                  <option value="all">All Quarters</option>
+                  <option value="Q1">Q1 (Jan–Mar)</option>
+                  <option value="Q2">Q2 (Apr–Jun)</option>
+                  <option value="Q3">Q3 (Jul–Sep)</option>
+                  <option value="Q4">Q4 (Oct–Dec)</option>
+                </select>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -194,51 +245,56 @@ export default function AccountsReceivablePage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200 dark:divide-zinc-700">
-                {filtered.map((inv) => (
-                  <tr key={inv.id} className="hover:bg-gray-50 dark:hover:bg-zinc-800 transition">
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div>
+                {filtered.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} className="px-6 py-12 text-center text-gray-500 dark:text-gray-400">
+                      No invoices found matching your filters.
+                    </td>
+                  </tr>
+                ) : (
+                  filtered.map((inv) => (
+                    <tr key={inv.id} className="hover:bg-gray-50 dark:hover:bg-zinc-800 transition">
+                      <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm font-medium text-gray-900 dark:text-white">
                           {inv.invoiceNo ?? "—"}
                         </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
-                      {inv.customer ?? "—"}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
-                      ${(inv.total ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                      {inv.status === "Partially Paid" && (
-                        <div className="text-xs text-amber-600 dark:text-amber-400">
-                          Received: ${(inv.paidAmount ?? 0).toFixed(2)}
-                        </div>
-                      )}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                          <select
-                            className="px-3 py-1 rounded-full text-xs font-medium cursor-pointer bg-gray-100 dark:bg-zinc-800 border border-gray-300 dark:border-zinc-700"
-                            value={inv.status ?? "Pending"}
-                            onChange={(e) =>
-                              updateStatus(
-                                inv.id,
-                                e.target.value as "Paid" | "Pending" | "Overdue" | "Partially Paid" | "Draft"
-                              )
-                            }>
-                            <option value="Paid">Paid</option>
-                            <option value="Pending">Pending</option>
-                            <option value="Overdue">Overdue</option>
-                            <option value="Partially Paid">Partially Paid</option>
-                            <option value="Draft">Draft</option>
-                          </select>
-                        </td>
-
-                  </tr>
-                ))}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
+                        {inv.customer ?? "—"}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
+                        ${(inv.total ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                        {inv.status === "Partially Paid" && (
+                          <div className="text-xs text-amber-600 dark:text-amber-400">
+                            Received: ${(inv.paidAmount ?? 0).toFixed(2)}
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <select
+                          className="px-3 py-1 rounded-full text-xs font-medium cursor-pointer bg-gray-100 dark:bg-zinc-800 border border-gray-300 dark:border-zinc-700"
+                          value={inv.status ?? "Pending"}
+                          onChange={(e) =>
+                            updateStatus(
+                              inv.id,
+                              e.target.value as Invoice["status"]
+                            )
+                          }
+                        >
+                          <option value="Paid">Paid</option>
+                          <option value="Pending">Pending</option>
+                          <option value="Overdue">Overdue</option>
+                          <option value="Partially Paid">Partially Paid</option>
+                          <option value="Draft">Draft</option>
+                        </select>
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
 
-          {/* Pagination placeholder */}
           <div className="px-6 py-4 border-t border-gray-200 dark:border-zinc-700 flex items-center justify-between bg-gray-50 dark:bg-zinc-800">
             <p className="text-sm text-gray-700 dark:text-gray-400">
               Showing {filtered.length} of {invoices.length} invoices

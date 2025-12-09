@@ -8,7 +8,8 @@ type ItemRow = {
   sku: string;
   qty: number | "";
   description: string;
-  rate: number | "";
+  baseRate: number | ""; // original cost from product
+  rate: number | "";     // final selling price (can be edited!)
 };
 
 type Product = {
@@ -37,12 +38,23 @@ export default function InvoicesPage() {
       sku: "",
       qty: "",
       description: "",
+      baseRate: "",
       rate: "",
     }))
   );
 
   const [discountPercent, setDiscountPercent] = useState<number | "">("");
+  const [markupTier, setMarkupTier] = useState<"AA" | "A" | "B" | "C" | "D">("AA"); // AA = 0% markup
   const [products, setProducts] = useState<Product[]>([]);
+
+  // AA = 0%, A=50%, B=60%, C=70%, D=80%
+  const markupRates: Record<"AA" | "A" | "B" | "C" | "D", number> = {
+    AA: 0.00,
+    A: 0.50,
+    B: 0.60,
+    C: 0.70,
+    D: 0.80,
+  };
 
   useEffect(() => {
     const fetchProducts = async () => {
@@ -57,23 +69,52 @@ export default function InvoicesPage() {
     fetchProducts();
   }, []);
 
+  // Recalculate rates when tier changes (only if not manually edited)
+  useEffect(() => {
+    setItems((prev) =>
+      prev.map((row) => {
+        if (!row.baseRate || row.baseRate === "") return row;
+
+        const expectedRate = Number(row.baseRate) * (1 + markupRates[markupTier]);
+        const currentRate = Number(row.rate || 0);
+
+        // Only auto-update if rate matches expected or is empty
+        if (Math.abs(currentRate - expectedRate) < 0.01 || currentRate === 0) {
+          return { ...row, rate: Number(expectedRate.toFixed(2)) };
+        }
+        return row; // keep manual override
+      })
+    );
+  }, [markupTier]);
+
   function updateRow(index: number, key: keyof ItemRow, value: any) {
-    const next = items.slice();
-    next[index] = { ...next[index], [key]: value };
+    setItems((prev) => {
+      const next = [...prev];
+      const row = { ...next[index] };
 
-    // Autofill description and rate if SKU matches a product
-    if (key === "sku") {
-      const product = products.find((p) => p.name === value || p.id.toString() === value);
-      if (product) {
-        next[index].description = product.description;
-        next[index].rate = product.inputcost;
-      } else {
-        next[index].description = "";
-        next[index].rate = "";
+      if (key === "sku") {
+        const product = products.find((p) => p.name === value || p.id.toString() === value);
+        if (product) {
+          row.description = product.description;
+          row.baseRate = product.inputcost;
+          const newRate = product.inputcost * (1 + markupRates[markupTier]);
+          row.rate = Number(newRate.toFixed(2));
+        } else {
+          row.description = "";
+          row.baseRate = "";
+          row.rate = "";
+        }
+      } else if (key === "qty") {
+        row.qty = value === "" ? "" : Number(value);
+      } else if (key === "description") {
+        row.description = value;
+      } else if (key === "rate") {
+        row.rate = value === "" ? "" : Number(Number(value).toFixed(2));
       }
-    }
 
-    setItems(next);
+      next[index] = row;
+      return next;
+    });
   }
 
   function calculateTotals() {
@@ -83,12 +124,12 @@ export default function InvoicesPage() {
       const rate = Number(r.rate) || 0;
       subtotal += q * rate;
     }
-    const discount = discountPercent === "" ? 0 : (subtotal * Number(discountPercent)) / 100;
-    const total = subtotal - discount;
-    return { subtotal, discount, total };
+    const discountAmount = discountPercent === "" ? 0 : (subtotal * Number(discountPercent)) / 100;
+    const total = subtotal - discountAmount;
+    return { subtotal, discountAmount, total };
   }
 
-  const { subtotal, discount, total } = calculateTotals();
+  const { subtotal, discountAmount, total } = calculateTotals();
 
   async function handleGeneratePdf() {
     const invoiceNo = `INV-${String(Date.now()).slice(-6)}`;
@@ -106,16 +147,21 @@ export default function InvoicesPage() {
       invoiceNo,
       billTo,
       shipTo,
-      items,
+      items: items.map((i) => ({
+        sku: i.sku,
+        qty: i.qty,
+        description: i.description,
+        rate: i.rate,
+      })),
       discountPercent: discountPercent === "" ? 0 : Number(discountPercent),
+      markupTier,
       subtotal,
-      discount,
+      discount: discountAmount,
       total,
     };
 
     try {
       const pdfBlob = (await generateEstimatePdf(payload, true)) as Blob;
-
       const reader = new FileReader();
       reader.readAsDataURL(pdfBlob);
       reader.onloadend = async () => {
@@ -128,9 +174,8 @@ export default function InvoicesPage() {
         });
 
         if (res.ok) {
-          alert(`Estimate saved and PDF generated! Invoice #${invoiceNo}`);
+          alert(`Estimate saved! Invoice #${invoiceNo}\nTier: ${markupTier} (${(markupRates[markupTier] * 100).toFixed(0)}% markup)`);
         } else {
-          console.error(await res.text());
           alert("PDF generated, but failed to save estimate.");
         }
       };
@@ -145,59 +190,104 @@ export default function InvoicesPage() {
       <Sidebar />
 
       <main className="flex-1 p-6 bg-gray-50">
-        <h1 className="text-2xl font-semibold mb-4">Create Estimate</h1>
+        <h1 className="text-3xl font-bold mb-6 text-gray-800">Create Estimate</h1>
 
         {/* HEADER */}
-        <section className="bg-white p-4 rounded shadow mb-6 grid grid-cols-2 gap-4">
-          <input value={companyName} onChange={(e) => setCompanyName(e.target.value)} placeholder="Company name" className="w-full border px-2 py-1 rounded" />
-          <input value={companyAddr1} onChange={(e) => setCompanyAddr1(e.target.value)} placeholder="Address line 1" className="w-full border px-2 py-1 rounded" />
-          <input value={companyAddr2} onChange={(e) => setCompanyAddr2(e.target.value)} placeholder="Address line 2" className="w-full border px-2 py-1 rounded" />
-          <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Phone" className="w-full border px-2 py-1 rounded" />
-          <input value={fax} onChange={(e) => setFax(e.target.value)} placeholder="Fax" className="w-full border px-2 py-1 rounded" />
-          <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" className="w-full border px-2 py-1 rounded" />
-          <input value={website} onChange={(e) => setWebsite(e.target.value)} placeholder="Website" className="w-full border px-2 py-1 rounded" />
-          <input value={date} onChange={(e) => setDate(e.target.value)} type="date" className="w-full border px-2 py-1 rounded" />
-          <input value={estimateNo} onChange={(e) => setEstimateNo(e.target.value)} placeholder="Estimate #" className="w-full border px-2 py-1 rounded" />
+        <section className="bg-white p-6 rounded-xl shadow mb-6 grid grid-cols-2 gap-4">
+          <input value={companyName} onChange={(e) => setCompanyName(e.target.value)} placeholder="Company name" className="w-full border px-3 py-2 rounded-lg" />
+          <input value={companyAddr1} onChange={(e) => setCompanyAddr1(e.target.value)} placeholder="Address line 1" className="w-full border px-3 py-2 rounded-lg" />
+          <input value={companyAddr2} onChange={(e) => setCompanyAddr2(e.target.value)} placeholder="Address line 2" className="w-full border px-3 py-2 rounded-lg" />
+          <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Phone" className="w-full border px-3 py-2 rounded-lg" />
+          <input value={fax} onChange={(e) => setFax(e.target.value)} placeholder="Fax" className="w-full border px-3 py-2 rounded-lg" />
+          <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" className="w-full border px-3 py-2 rounded-lg" />
+          <input value={website} onChange={(e) => setWebsite(e.target.value)} placeholder="Website" className="w-full border px-3 py-2 rounded-lg" />
+          <input value={date} onChange={(e) => setDate(e.target.value)} type="date" className="w-full border px-3 py-2 rounded-lg" />
+          <input value={estimateNo} onChange={(e) => setEstimateNo(e.target.value)} placeholder="Estimate #" className="w-full border px-3 py-2 rounded-lg" />
         </section>
 
         {/* BILL TO / SHIP TO */}
-        <section className="bg-white p-4 rounded shadow mb-6 grid grid-cols-2 gap-4">
-          <textarea value={billTo} onChange={(e) => setBillTo(e.target.value)} placeholder="Bill To" className="w-full border px-2 py-1 rounded" rows={5} />
-          <textarea value={shipTo} onChange={(e) => setShipTo(e.target.value)} placeholder="Ship To" className="w-full border px-2 py-1 rounded" rows={5} />
+        <section className="bg-white p-6 rounded-xl shadow mb-6 grid grid-cols-2 gap-6">
+          <textarea value={billTo} onChange={(e) => setBillTo(e.target.value)} placeholder="Bill To" className="w-full border px-3 py-2 rounded-lg" rows={5} />
+          <textarea value={shipTo} onChange={(e) => setShipTo(e.target.value)} placeholder="Ship To" className="w-full border px-3 py-2 rounded-lg" rows={5} />
+        </section>
+
+        {/* MARKUP TIER - NOW INCLUDES AA */}
+        <section className="bg-gradient-to-r from-green-50 to-blue-50 p-8 rounded-xl shadow-lg mb-6 border-2 border-green-300">
+          <div className="flex items-center gap-6">
+
+            <select
+              value={markupTier}
+              onChange={(e) => setMarkupTier(e.target.value as "AA" | "A" | "B" | "C" | "D")}
+              className="px-8 py-4 text-2xl font-bold bg-white border-4 border-green-600 rounded-xl shadow-lg focus:outline-none focus:ring-4 focus:ring-green-300 cursor-pointer transition"
+            >
+              <option value="AA">AA — 0%</option>
+              <option value="A">A — 50</option>
+              <option value="B">B — 60</option>
+              <option value="C">C — 70</option>
+              <option value="D">D — 80 </option>
+            </select>
+            <span className="text-xl font-medium text-green-700">
+              
+            </span>
+          </div>
         </section>
 
         {/* ITEMS TABLE */}
-        <section className="bg-white p-4 rounded shadow mb-6">
-          <h3 className="font-medium mb-2">Items (10 rows)</h3>
+        <section className="bg-white p-6 rounded-xl shadow-lg mb-6">
+          <h3 className="text-xl font-bold mb-4 text-gray-800">Items</h3>
           <div className="overflow-x-auto">
             <table className="w-full text-sm table-fixed border-collapse">
-              <thead>
+              <thead className="bg-gray-100">
                 <tr>
-                  <th className="border px-2 w-24">SKU / Item</th>
-                  <th className="border px-2 w-16">Qty</th>
-                  <th className="border px-2">Description</th>
-                  <th className="border px-2 w-28">Rate</th>
-                  <th className="border px-2 w-28">Total</th>
+                  <th className="border px-3 py-3 w-24 text-left">Item</th>
+                  <th className="border px-3 py-3 w-16 text-left">Qty</th>
+                  <th className="border px-3 py-3 text-left">Description</th>
+                  <th className="border px-3 py-3 w-32 text-right">Rate (Selling)</th>
+                  <th className="border px-3 py-3 w-32 text-right font-bold">Line Total</th>
                 </tr>
               </thead>
               <tbody>
                 {items.map((r, i) => {
-                  const rowTotal = (Number(r.qty) || 0) * (Number(r.rate) || 0);
+                  const lineTotal = (Number(r.qty) || 0) * (Number(r.rate) || 0);
                   return (
-                    <tr key={i}>
-                      <td className="border px-2">
-                        <input className="w-full" value={r.sku} onChange={(e) => updateRow(i, "sku", e.target.value)} />
+                    <tr key={i} className="hover:bg-gray-50">
+                      <td className="border px-3 py-2">
+                        <input
+                          className="w-full bg-gray-50 rounded px-2 py-1"
+                          value={r.sku}
+                          onChange={(e) => updateRow(i, "sku", e.target.value)}
+                          placeholder="SKU"
+                        />
                       </td>
-                      <td className="border px-2">
-                        <input className="w-full" value={r.qty} onChange={(e) => updateRow(i, "qty", e.target.value === "" ? "" : Number(e.target.value))} />
+                      <td className="border px-3 py-2">
+                        <input
+                          className="w-full text-center rounded px-2 py-1"
+                          value={r.qty}
+                          onChange={(e) => updateRow(i, "qty", e.target.value === "" ? "" : Number(e.target.value))}
+                          type="number"
+                          min="0"
+                        />
                       </td>
-                      <td className="border px-2">
-                        <input className="w-full" value={r.description} onChange={(e) => updateRow(i, "description", e.target.value)} />
+                      <td className="border px-3 py-2">
+                        <input
+                          className="w-full bg-gray-50 rounded px-2 py-1"
+                          value={r.description}
+                          onChange={(e) => updateRow(i, "description", e.target.value)}
+                        />
                       </td>
-                      <td className="border px-2">
-                        <input className="w-full" type="number" step="0.01" value={r.rate} onChange={(e) => updateRow(i, "rate", e.target.value)} />
+                      <td className="border px-3 py-2">
+                        <input
+                          className="w-full text-right font-medium text-blue-700 bg-blue-50 rounded px-2 py-1 focus:ring-2 focus:ring-blue-400"
+                          value={r.rate}
+                          onChange={(e) => updateRow(i, "rate", e.target.value === "" ? "" : e.target.value)}
+                          type="number"
+                          step="0.01"
+                          placeholder="0.00"
+                        />
                       </td>
-                      <td className="border px-2 text-right">{rowTotal.toFixed(2)}</td>
+                      <td className="border px-3 py-2 text-right font-bold text-green-700 bg-green-50">
+                        ${lineTotal.toFixed(2)}
+                      </td>
                     </tr>
                   );
                 })}
@@ -207,21 +297,43 @@ export default function InvoicesPage() {
         </section>
 
         {/* TOTALS */}
-        <section className="bg-white p-4 rounded shadow mb-6 max-w-md">
-          <div className="flex gap-2 items-center mb-2">
-            <label className="w-32">Discount %</label>
-            <input type="number" step="0.01" value={discountPercent} onChange={(e) => setDiscountPercent(e.target.value === "" ? "" : Number(e.target.value))} className="border px-2 py-1 rounded flex-1" />
+        <section className="bg-gradient-to-r from-green-50 to-blue-50 p-8 rounded-xl shadow-lg max-w-md border-2 border-green-200">
+          <div className="space-y-4 text-lg">
+            <div className="flex justify-between font-bold text-2xl">
+              <span>Subtotal</span>
+              <span className="text-blue-700">${subtotal.toFixed(2)}</span>
+            </div>
+            {discountPercent !== "" && discountAmount > 0 && (
+              <div className="flex justify-between text-red-600">
+                <span>Discount ({discountPercent}%)</span>
+                <span>-${discountAmount.toFixed(2)}</span>
+              </div>
+            )}
+            <div className="flex justify-between font-bold text-3xl pt-4 border-t-4 border-green-400">
+              <span>Final Total</span>
+              <span className="text-green-700">${total.toFixed(2)}</span>
+            </div>
           </div>
-          <div className="space-y-1">
-            <div className="flex justify-between"><span>Subtotal</span><span>${subtotal.toFixed(2)}</span></div>
-            <div className="flex justify-between"><span>Discount</span><span>-${discount.toFixed(2)}</span></div>
-            <div className="flex justify-between font-semibold text-lg pt-1 border-t"><span>Total</span><span>${total.toFixed(2)}</span></div>
+
+          <div className="mt-6 flex items-center gap-4">
+            <label className="font-bold text-lg">Extra Discount %</label>
+            <input
+              type="number"
+              step="0.01"
+              value={discountPercent}
+              onChange={(e) => setDiscountPercent(e.target.value === "" ? "" : Number(e.target.value))}
+              className="w-32 px-4 py-3 border-2 border-green-500 rounded-lg text-lg font-bold focus:outline-none focus:ring-4 focus:ring-green-300"
+              placeholder="0"
+            />
           </div>
         </section>
 
         {/* GENERATE BUTTON */}
-        <div className="flex gap-2">
-          <button onClick={handleGeneratePdf} className="bg-indigo-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-indigo-700 transition">
+        <div className="mt-8">
+          <button
+            onClick={handleGeneratePdf}
+            className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-10 py-5 rounded-xl font-bold text-2xl hover:from-indigo-700 hover:to-purple-700 transition transform hover:scale-105 shadow-2xl"
+          >
             Generate & Save Estimate
           </button>
         </div>

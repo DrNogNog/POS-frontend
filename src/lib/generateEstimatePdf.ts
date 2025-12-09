@@ -82,28 +82,37 @@ export async function generateEstimatePdf(
 
   // Header background
   page.drawRectangle({ x: margin, y: tableTop - 25, width: width - 2 * margin, height: 25, color: rgb(0.9, 0.9, 0.9) });
-  const headers = ["Item", "Qty", "Description", "Rate", "Total"];
+  const headers = ["Item", "Qty", "Description", "Price", "Total"];
   const colWidths = [80, 60, 220, 80, 100];
   let x = margin;
-  headers.forEach((h, i) => { page.drawText(h, { x: x + 8, y: tableTop - 15, size: 11, font: bold }); x += colWidths[i]; });
+  headers.forEach((h, i) => {
+    page.drawText(h, { x: x + 8, y: tableTop - 15, size: 11, font: bold });
+    x += colWidths[i];
+  });
   page.drawLine({ start: { x: margin, y: tableTop - 25 }, end: { x: width - margin, y: tableTop - 25 }, thickness: 1 });
 
   y = tableTop - 50;
   for (const item of data.items) {
-    if (!item.sku && !item.qty && !item.rate) continue;
     const qty = Number(item.qty) || 0;
     const rate = Number(item.rate) || 0;
     const amount = qty * rate;
 
+    if (qty === 0 && rate === 0 && !item.description && !item.productId) continue;
+
     x = margin;
-    page.drawText(item.sku || "", { x: x + 5, y, size: 10, font });
+    // Fixed: productId is number → convert to string
+    page.drawText(item.productId?.toString() || "", { x: x + 5, y, size: 10, font });
     x += colWidths[0];
+
     page.drawText(qty > 0 ? qty.toString() : "", { x: x + 5, y, size: 10, font });
     x += colWidths[1];
+
     page.drawText(item.description || "", { x: x + 5, y, size: 10, font });
     x += colWidths[2];
+
     page.drawText(rate > 0 ? formatCurrency(rate) : "", { x: x + 5, y, size: 10, font });
     x += colWidths[3];
+
     page.drawText(amount > 0 ? formatCurrency(amount) : "", { x: x + 5, y, size: 10, font });
     y -= 20;
   }
@@ -112,26 +121,29 @@ export async function generateEstimatePdf(
   const totalBoxWidth = 200;
   const totalBoxHeight = 80;
   const totalBoxX = width - margin - totalBoxWidth;
-  const totalBoxY = 10; // fixed Y, near bottom of page
+  const totalBoxY = 10;
 
   page.drawRectangle({ x: totalBoxX, y: totalBoxY, width: totalBoxWidth, height: totalBoxHeight, borderColor: rgb(0, 0, 0), borderWidth: 1.5 });
   let ty = totalBoxY + totalBoxHeight - 30;
   page.drawText("Subtotal", { x: totalBoxX + 15, y: ty, size: 12, font });
   page.drawText(formatCurrency(data.subtotal), { x: totalBoxX + totalBoxWidth - 100, y: ty, size: 12, font });
   ty -= 28;
+
   if (data.discount > 0) {
     page.drawText("Discount", { x: totalBoxX + 15, y: ty, size: 12, font });
     page.drawText(`-${formatCurrency(data.discount)}`, { x: totalBoxX + totalBoxWidth - 100, y: ty, size: 12, font });
     ty -= 28;
   }
+
   page.drawText("Total", { x: totalBoxX + 15, y: ty, size: 14, font: bold });
   page.drawText(formatCurrency(data.total), { x: totalBoxX + totalBoxWidth - 110, y: ty, size: 14, font: bold });
 
   // FINALIZE PDF
   const pdfBytes = await doc.save();
 
-  // Return Blob if requested
-  if (returnBlob) return new Blob([new Uint8Array(pdfBytes)], { type: "application/pdf" });
+  if (returnBlob) {
+    return new Blob([new Uint8Array(pdfBytes)], { type: "application/pdf" });
+  }
 
   // Trigger download
   const blob = new Blob([new Uint8Array(pdfBytes)], { type: "application/pdf" });
@@ -142,7 +154,7 @@ export async function generateEstimatePdf(
   a.click();
   URL.revokeObjectURL(url);
 
-  // Save to backend including items
+  // Save to backend
   try {
     await fetch("http://localhost:4000/api/estimates/save", {
       method: "POST",
@@ -156,10 +168,11 @@ export async function generateEstimatePdf(
         discount: data.discount,
         total: data.total,
         customer: data.billTo?.split("\n")[0],
-        pdfData: btoa(String.fromCharCode(...pdfBytes)),
-        items: data.items
-      }) // ✅ Closing JSON.stringify
-    }); // ✅ Closing fetch options
-} catch (err) {
-  console.error("Save failed:", err);
-}}
+        pdfData: btoa(String.fromCharCode(...new Uint8Array(pdfBytes))),
+        items: data.items,
+      }),
+    });
+  } catch (err) {
+    console.error("Failed to save estimate PDF:", err);
+  }
+}
