@@ -128,40 +128,43 @@ export default function EstimatesPage() {
       // Replace your entire resolvedItems block with this:
             // FINAL VERSION – works with your real data (uses products.name correctly)
       const resolvedItems = (full.items || [])
-        .map((i: any) => {
-          const qty = Number(i.qty);
-          const rate = Number(i.rate || i.inputcost);
-          if (isNaN(qty) || qty <= 0 || isNaN(rate)) return null;
+  .map((i: any) => {
+    const qty = Number(i.qty);
+    const rate = Number(i.rate || i.inputcost);
+    if (isNaN(qty) || qty <= 0 || isNaN(rate)) return null;
 
-          // Get the product identifier: try sku first (old format), then item (new format)
-          const productIdentifier = (i.sku || i.item || "").toString().trim();
-          if (!productIdentifier) return null;
+    // Always convert SKU/item to uppercase for consistent search
+    const productIdentifier = (i.sku || i.item || "").toString().trim().toUpperCase();
+    if (!productIdentifier) return null;
 
-          // Find product where product.name === the SKU/item
-          const product = products.find(p => p.name.trim() === productIdentifier);
+    // Find product where product.name (also uppercased) matches
+    const product = products.find(
+      (p) => p.name.trim().toUpperCase() === productIdentifier
+    );
 
-          if (!product) {
-            throw new Error(
-              `Product not found in inventory!\n` +
-              `SKU/Item: "${productIdentifier}"\n` +
-              `Line: ${JSON.stringify(i)}\n\n` +
-              `Available product names (SKUs): ${products.map(p => p.name).join(', ')}`
-            );
-          }
+    if (!product) {
+      throw new Error(
+        `Product not found in inventory!\n` +
+        `SKU/Item: "${productIdentifier}"\n` +
+        `Line: ${JSON.stringify(i)}\n\n` +
+        `Available product names (SKUs): ${products.map(p => p.name).join(', ')}`
+      );
+    }
 
-          return {
-            product,                                    // the full Product object
-            qty,
-            rate,
-            description: i.description || product.description || product.name,
-          };
-        })
-        .filter(Boolean) as {
-          product: Product;
-          qty: number;
-          rate: number;
-          description: string;
-        }[];
+    return {
+      product,                                    
+      qty,
+      rate,
+      description: i.description || product.description || product.name,
+    };
+  })
+  .filter(Boolean) as {
+    product: Product;
+    qty: number;
+    rate: number;
+    description: string;
+  }[];
+
 
       if (resolvedItems.length === 0) {
         alert("No valid items found to invoice.");

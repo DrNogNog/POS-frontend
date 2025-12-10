@@ -12,7 +12,7 @@ interface Order {
   id: number;
   name: string;
   description?: string | null;
-  vendors?: string | null;
+  vendors?: string[] | null;
   count: number;
   createdAt: string;
   invoiceNo?: string | null;
@@ -131,23 +131,13 @@ export default function ProductsPage() {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const allColumns = [
-    "Item",
-    "Description",
-    "Cost",
-    "Stock",
-    "Vendors",
-    "Actions",
-  ];
-
+  const allColumns = ["Item", "Description", "Cost", "Stock", "Vendors", "Actions"];
   const [visibleColumns, setVisibleColumns] = useState<Set<string>>(new Set(allColumns));
 
-  // Load products
   const loadProducts = async () => {
     try {
       const res = await api("/products");
       const data: any[] = Array.isArray(res) ? res : [];
-
       const normalized: Product[] = data.map((p) => ({
         ...p,
         id: String(p.id),
@@ -155,7 +145,6 @@ export default function ProductsPage() {
         stock: p.stock ?? 0,
         vendors: p.vendors ?? [],
       }));
-
       setProducts(normalized);
     } catch {
       setProducts([]);
@@ -167,18 +156,18 @@ export default function ProductsPage() {
   }, [activePage]);
 
   const filteredProducts = useMemo(() => {
-    const query = searchQuery.toLowerCase().trim();
+    const query = searchQuery.toUpperCase().trim();
     if (!query) return products;
-    return products.filter((p) =>
-      p.name.toLowerCase().includes(query) ||
-      p.description?.toLowerCase().includes(query) ||
-      p.vendors?.some((v) => v.toLowerCase().includes(query))
+    return products.filter(
+      (p) =>
+        p.name.toUpperCase().includes(query) ||
+        (p.description?.includes(query) ?? false) ||
+        p.vendors?.some((v) => v.includes(query))
     );
   }, [searchQuery, products]);
 
-  const updateProductInState = (updated: Product) => {
+  const updateProductInState = (updated: Product) =>
     setProducts((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
-  };
 
   const deleteProduct = async (id: string) => {
     try {
@@ -190,23 +179,16 @@ export default function ProductsPage() {
   const duplicateProduct = async (product: Product) => {
     try {
       const body = {
-        name: product.name,
-        inputcost: product.inputcost,
-        description: product.description,
-        stock: product.stock,
-        vendors: product.vendors,
-        images: product.images,
+        ...product,
+        name: product.name.toUpperCase(),
       };
-
       const res = await fetch("http://localhost:4000/api/products/duplicate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
-
       const newProduct = await res.json();
       newProduct.id = String(newProduct.id);
-
       setProducts((prev) => [...prev, newProduct]);
     } catch {}
   };
@@ -214,7 +196,7 @@ export default function ProductsPage() {
   const editProduct = async (product: Product) => {
     try {
       const form = new FormData();
-      form.append("name", product.name);
+      form.append("name", product.name.toUpperCase());
       form.append("inputcost", String(product.inputcost));
       if (product.description) form.append("description", product.description);
       if (product.stock !== undefined) form.append("stock", product.stock.toString());
@@ -261,7 +243,7 @@ export default function ProductsPage() {
     }
 
     const formData = new FormData();
-    formData.append("name", newName.trim());
+    formData.append("name", newName.toUpperCase().trim());
     formData.append("inputcost", newInputCost.trim());
     formData.append("stock", newStock);
     formData.append("needToOrder", "0");
@@ -374,7 +356,7 @@ export default function ProductsPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredProducts.map((product) => (
+                    {products.map((product) => (
                       <ProductTableRow
                         key={product.id}
                         product={product}
