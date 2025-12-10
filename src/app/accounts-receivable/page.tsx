@@ -2,17 +2,24 @@
 
 import { useState, useEffect } from "react";
 import Sidebar from "@/components/sidebar";
-import { Search, DollarSign, TrendingUp, AlertCircle, Calendar } from "lucide-react";
+import {
+  Search,
+  DollarSign,
+  TrendingUp,
+  AlertCircle,
+  Clock,
+  CheckCircle2,
+} from "lucide-react";
 
 interface Invoice {
-  id: string;
-  customer?: string;
-  invoiceNo?: string;
-  total?: number;
-  overdueAmount?: number;
-  paidAmount?: number;
-  status?: "Paid" | "Pending" | "Overdue" | "Partially Paid" | "Draft";
-  date?: string; // <-- Make sure your backend returns this!
+  id: number;
+  invoiceNo: string;
+  total: string;
+  paidAmount: string;
+  dueDate: string;
+  status: "PENDING" | "PAID" | "PARTIALLY_PAID" | "OVERDUE";
+  createdAt: string;
+  daysOverdue?: number;
 }
 
 export default function AccountsReceivablePage() {
@@ -20,287 +27,339 @@ export default function AccountsReceivablePage() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [filterStatus, setFilterStatus] = useState<string>("all");
-  const [selectedQuarter, setSelectedQuarter] = useState<string>("all");
+
+  // Payment modal
+  const [modalOpen, setModalOpen] = useState(false);
+  const [selectedInv, setSelectedInv] = useState<Invoice | null>(null);
+  const [paymentInput, setPaymentInput] = useState("");
+
+  // Due Date Edit modal
+  const [editingDueDate, setEditingDueDate] = useState<Invoice | null>(null);
+  const [newDueDate, setNewDueDate] = useState("");
 
   useEffect(() => {
     fetchInvoices();
   }, []);
 
-  async function updateStatus(id: string, newStatus: Invoice["status"]) {
-    try {
-      setInvoices((prev) =>
-        prev.map((inv) =>
-          inv.id === id ? { ...inv, status: newStatus } : inv
-        )
-      );
-
-      await fetch(`http://localhost:4000/api/invoices/${id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: newStatus }),
-      });
-    } catch (err) {
-      console.error("Failed to update invoice status", err);
-      alert("Error updating invoice status");
-      fetchInvoices();
-    }
-  }
-
   async function fetchInvoices() {
     try {
       const res = await fetch("http://localhost:4000/api/invoices");
-      if (!res.ok) throw new Error("Failed to fetch invoices");
-      const data: Invoice[] = await res.json();
-      setInvoices(data);
+      if (!res.ok) throw new Error("Failed");
+      const data = await res.json();
+
+      const now = new Date();
+
+      const enriched = data.map((inv: any) => {
+        const total = parseFloat(inv.total);
+        const paid = parseFloat(inv.paidAmount || "0");
+        const due = new Date(inv.dueDate);
+        const isOverdue = now > due;
+        const daysOverdue = Math.max(0, Math.floor((now.getTime() - due.getTime()) / 86400000));
+
+        let status: Invoice["status"] = inv.status || "PENDING";
+
+        if (status !== "PAID" && status !== "PARTIALLY_PAID") {
+          if (paid >= total) status = "PAID";
+          else if (paid > 0) status = "PARTIALLY_PAID";
+          else if (isOverdue) status = "OVERDUE";
+        }
+
+        return {
+          ...inv,
+          status,
+          daysOverdue: status === "OVERDUE" ? daysOverdue : 0,
+        };
+      });
+
+      setInvoices(enriched);
     } catch (err) {
-      console.error(err);
-      alert("Failed to load invoices.");
+      alert("Failed to load invoices");
     } finally {
       setLoading(false);
     }
   }
 
-  // Get quarter from date string (e.g. "2025-03-15")
-  const getQuarter = (dateStr: string | undefined): string => {
-    if (!dateStr) return "all";
-    const date = new Date(dateStr);
-    const month = date.getMonth() + 1;
-    if (month <= 3) return "Q1";
-    if (month <= 6) return "Q2";
-    if (month <= 9) return "Q3";
-    return "Q4";
+  // Record Payment
+  const recordPayment = async () => {
+    if (!selectedInv || !paymentInput || parseFloat(paymentInput) <= 0) return;
+
+    const amount = parseFloat(paymentInput);
+    try {
+      await fetch(`http://localhost:4000/api/invoices/${selectedInv.id}/pay`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ amount }),
+      });
+
+      setModalOpen(false);
+      setPaymentInput("");
+      setSelectedInv(null);
+      fetchInvoices();
+    } catch {
+      alert("Payment failed");
+    }
+  };
+
+  // Save New Due Date — FIXED: was "async ()adecimal" → now correct
+  const saveNewDueDate = async () => {
+    if (!editingDueDate || !newDueDate) return;
+
+    try {
+      await fetch(`http://localhost:4000/api/invoices/${editingDueDate.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ dueDate: newDueDate }),
+      });
+
+      setEditingDueDate(null);
+      setNewDueDate("");
+      fetchInvoices();
+    } catch {
+      alert("Failed to update due date");
+    }
   };
 
   // Calculations
-  const totalReceivable = invoices.reduce((sum, r) => {
-    const amount = Number(r.total) || 0;
-    const paid = Number(r.paidAmount) || 0;
-
-    if (r.status === "Paid") return sum;
-    if (r.status === "Partially Paid") return sum + Math.max(amount - paid, 0);
-    return sum + amount;
-  }, 0);
+  const totalReceivable = invoices
+    .filter((i) => i.status !== "PAID")
+    .reduce((sum, i) => sum + (parseFloat(i.total) - parseFloat(i.paidAmount || "0")), 0);
 
   const overdueAmount = invoices
-    .filter((r) => r.status === "Overdue")
-    .reduce((sum, r) => sum + (r.overdueAmount ?? 0), 0);
+    .filter((i) => i.status === "OVERDUE")
+    .reduce((sum, i) => sum + (parseFloat(i.total) - parseFloat(i.paidAmount || "0")), 0);
 
-  const paidThisMonth = invoices
-    .filter((r) => r.status === "Paid")
-    .reduce((sum, r) => sum + (r.paidAmount ?? 0), 0);
+  const collectedThisMonth = invoices.reduce((sum, i) => {
+    const paid = parseFloat(i.paidAmount || "0");
+    const month = new Date(i.createdAt).getMonth();
+    return month === new Date().getMonth() ? sum + paid : sum;
+  }, 0);
 
-  // Filtering logic
-  const filtered = invoices.filter((item) => {
-    const customer = item.customer ?? "";
-    const invoiceNo = item.invoiceNo ?? "";
-    const status = item.status ?? "";
-    const quarter = getQuarter(item.date);
+  const filtered = invoices.filter(
+    (i) =>
+      i.invoiceNo.toLowerCase().includes(searchTerm.toLowerCase()) &&
+      (filterStatus === "all" || i.status === filterStatus)
+  );
 
-    const matchesSearch =
-      customer.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      invoiceNo.toLowerCase().includes(searchTerm.toLowerCase());
+  const getStatusBadge = (status: Invoice["status"]) => {
+    const map = {
+      PAID: { label: "Paid in Full", color: "bg-green-100 text-green-800", icon: CheckCircle2 },
+      PARTIALLY_PAID: { label: "Partially Paid", color: "bg-yellow-100 text-yellow-800", icon: DollarSign },
+      OVERDUE: { label: "Overdue", color: "bg-red-100 text-red-800", icon: AlertCircle },
+      PENDING: { label: "Pending", color: "bg-gray-100 text-gray-800", icon: Clock },
+    };
+    const config = map[status];
+    const Icon = config.icon;
+    return (
+      <span className={`px-3 py-1.5 rounded-full text-xs font-medium flex items-center gap-1.5 w-fit ${config.color}`}>
+        <Icon className="w-4 h-4" />
+        {config.label}
+      </span>
+    );
+  };
 
-    const matchesStatus =
-      filterStatus === "all" || status.toLowerCase() === filterStatus.toLowerCase();
-
-    const matchesQuarter =
-      selectedQuarter === "all" || quarter === selectedQuarter;
-
-    return matchesSearch && matchesStatus && matchesQuarter;
-  });
+  if (loading) return <div className="flex min-h-screen items-center justify-center text-2xl">Loading...</div>;
 
   return (
-    <div className="flex min-h-screen bg-zinc-100 dark:bg-zinc-950">
+    <div className="flex min-h-screen bg-zinc-100">
       <Sidebar />
-      <main className="flex-1 p-6 lg:p-10">
-        {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
-            Accounts Receivable
-          </h1>
-          <p className="text-gray-600 dark:text-gray-400">
-            Track customer invoices, payments, and outstanding balances
-          </p>
-        </div>
+      <main className="flex-1 p-8">
+        <h1 className="text-4xl font-bold text-gray-900 mb-10">Accounts Receivable</h1>
 
-        {/* Summary Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          {/* ... your 4 cards unchanged ... */}
-          <div className="bg-white dark:bg-zinc-900 rounded-xl shadow-sm p-6 border border-gray-200 dark:border-zinc-800">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600 dark:text-gray-400">Total Receivable</p>
-                <p className="text-2xl font-bold text-gray-900 dark:text-white mt-2">
-                  ${(totalReceivable ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                </p>
-              </div>
-              <div className="p-3 bg-blue-100 dark:bg-blue-900 rounded-lg">
-                <DollarSign className="w-6 h-6 text-blue-600 dark:text-blue-400" />
-              </div>
-            </div>
+        {/* Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
+          <div className="bg-white rounded-2xl shadow-lg p-6 border">
+            <p className="text-sm text-gray-600">Total Receivable</p>
+            <p className="text-3xl font-bold text-blue-600 mt-2">${totalReceivable.toFixed(2)}</p>
           </div>
-
-          <div className="bg-white dark:bg-zinc-900 rounded-xl shadow-sm p-6 border border-gray-200 dark:border-zinc-800">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600 dark:text-gray-400">Overdue Amount</p>
-                <p className="text-2xl font-bold text-red-600 dark:text-red-400 mt-2">
-                  ${(overdueAmount ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                </p>
-              </div>
-              <div className="p-3 bg-red-100 dark:bg-red-900 rounded-lg">
-                <AlertCircle className="w-6 h-6 text-red-600 dark:text-red-400" />
-              </div>
-            </div>
+          <div className="bg-white rounded-2xl shadow-lg p-6 border">
+            <p className="text-sm text-gray-600">Overdue</p>
+            <p className="text-3xl font-bold text-red-600 mt-2">${overdueAmount.toFixed(2)}</p>
           </div>
-
-          <div className="bg-white dark:bg-zinc-900 rounded-xl shadow-sm p-6 border border-gray-200 dark:border-zinc-800">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600 dark:text-gray-400">Collected This Month</p>
-                <p className="text-2xl font-bold text-green-600 dark:text-green-400 mt-2">
-                  ${(paidThisMonth ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                </p>
-              </div>
-              <div className="p-3 bg-green-100 dark:bg-green-900 rounded-lg">
-                <TrendingUp className="w-6 h-6 text-green-600 dark:text-green-400" />
-              </div>
-            </div>
+          <div className="bg-white rounded-2xl shadow-lg p-6 border">
+            <p className="text-sm text-gray-600">Collected This Month</p>
+            <p className="text-3xl font-bold text-green-600 mt-2">${collectedThisMonth.toFixed(2)}</p>
           </div>
-
-          <div className="bg-white dark:bg-zinc-900 rounded-xl shadow-sm p-6 border border-gray-200 dark:border-zinc-800">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600 dark:text-gray-400">Pending Invoices</p>
-                <p className="text-2xl font-bold text-gray-900 dark:text-white mt-2">
-                  {invoices.filter(r => r.status === "Pending" || r.status === "Partially Paid").length}
-                </p>
-              </div>
-              <div className="p-3 bg-amber-100 dark:bg-amber-900 rounded-lg">
-                <TrendingUp className="w-6 h-6 text-amber-600 dark:text-amber-400" />
-              </div>
-            </div>
+          <div className="bg-white rounded-2xl shadow-lg p-6 border">
+            <p className="text-sm text-gray-600">Pending</p>
+            <p className="text-3xl font-bold text-amber-600 mt-2">
+              {invoices.filter((i) => i.status !== "PAID").length}
+            </p>
           </div>
         </div>
 
-        {/* Toolbar with Search + Status + Quarter Filter */}
-        <div className="bg-white dark:bg-zinc-900 rounded-xl shadow-sm border border-gray-200 dark:border-zinc-800 p-6 mb-6">
-          <div className="flex flex-col lg:flex-row gap-4 items-center justify-between">
-            {/* Search */}
-            <div className="relative flex-1 max-w-md">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
+        {/* Search + Filter */}
+        <div className="bg-white rounded-2xl shadow-lg p-6 mb-8">
+          <div className="flex gap-4">
+            <div className="flex-1 relative">
+              <Search className="absolute left-3 top-3 w-5 h-5 text-gray-400" />
               <input
                 type="text"
-                placeholder="Search customers or invoice number..."
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-zinc-700 rounded-lg bg-gray-50 dark:bg-zinc-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="Search invoice..."
+                className="w-full pl-10 pr-4 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
             </div>
-
-            <div className="flex gap-4">
-              {/* Status Filter */}
-              <select
-                value={filterStatus}
-                onChange={(e) => setFilterStatus(e.target.value)}
-                className="px-4 py-2 border border-gray-300 dark:border-zinc-700 rounded-lg bg-gray-50 dark:bg-zinc-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="all">All Status</option>
-                <option value="paid">Paid</option>
-                <option value="pending">Pending</option>
-                <option value="overdue">Overdue</option>
-                <option value="partially paid">Partially Paid</option>
-                <option value="draft">Draft</option>
-              </select>
-
-              {/* Quarter Filter */}
-              <div className="relative">
-                <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5 pointer-events-none" />
-                <select
-                  value={selectedQuarter}
-                  onChange={(e) => setSelectedQuarter(e.target.value)}
-                  className="pl-10 pr-8 py-2 border border-gray-300 dark:border-zinc-700 rounded-lg bg-gray-50 dark:bg-zinc-800 focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none"
-                >
-                  <option value="all">All Quarters</option>
-                  <option value="Q1">Q1 (Jan–Mar)</option>
-                  <option value="Q2">Q2 (Apr–Jun)</option>
-                  <option value="Q3">Q3 (Jul–Sep)</option>
-                  <option value="Q4">Q4 (Oct–Dec)</option>
-                </select>
-              </div>
-            </div>
+            <select
+              value={filterStatus}
+              onChange={(e) => setFilterStatus(e.target.value)}
+              className="px-6 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="all">All Status</option>
+              <option value="PENDING">Pending</option>
+              <option value="PARTIALLY_PAID">Partially Paid</option>
+              <option value="PAID">Paid in Full</option>
+              <option value="OVERDUE">Overdue</option>
+            </select>
           </div>
         </div>
 
         {/* Table */}
-        <div className="bg-white dark:bg-zinc-900 rounded-xl shadow-sm border border-gray-200 dark:border-zinc-800 overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-50 dark:bg-zinc-800 border-b border-gray-200 dark:border-zinc-700">
-                <tr>
-                  <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Invoice</th>
-                  <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Customer</th>
-                  <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Amount</th>
-                  <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Status</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200 dark:divide-zinc-700">
-                {filtered.length === 0 ? (
-                  <tr>
-                    <td colSpan={4} className="px-6 py-12 text-center text-gray-500 dark:text-gray-400">
-                      No invoices found matching your filters.
+        <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
+          <table className="w-full">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-8 py-5 text-left text-xs font-semibold text-gray-600 uppercase">Invoice</th>
+                <th className="px-8 py-5 text-left text-xs font-semibold text-gray-600 uppercase">Amount</th>
+                <th className="px-8 py-5 text-left text-xs font-semibold text-gray-600 uppercase">Due Date</th>
+                <th className="px-8 py-5 text-left text-xs font-semibold text-gray-600 uppercase">Status</th>
+                <th className="px-8 py-5 text-left text-xs font-semibold text-gray-600 uppercase">Action</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y">
+              {filtered.map((inv) => {
+                const remaining = parseFloat(inv.total) - parseFloat(inv.paidAmount || "0");
+                return (
+                  <tr key={inv.id} className="hover:bg-gray-50">
+                    <td className="px-8 py-6 font-semibold text-blue-700 text-lg">#{inv.invoiceNo}</td>
+                    <td className="px-8 py-6">
+                      <div className="text-lg font-medium">${parseFloat(inv.total).toFixed(2)}</div>
+                      {inv.status === "PARTIALLY_PAID" && (
+                        <div className="text-sm text-gray-600 mt-1">
+                          Paid: <span className="font-medium">${parseFloat(inv.paidAmount).toFixed(2)}</span> • 
+                          <span className="text-amber-600 font-medium">Due: ${remaining.toFixed(2)}</span>
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-8 py-6">
+                      <div className="flex items-center gap-3">
+                        <span className="text-gray-700">
+                          {new Date(inv.dueDate).toLocaleDateString("en-US", {
+                            month: "short",
+                            day: "numeric",
+                            year: "numeric",
+                          })}
+                        </span>
+                        <button
+                          onClick={() => {
+                            setEditingDueDate(inv);
+                            setNewDueDate(inv.dueDate.split("T")[0]); // YYYY-MM-DD
+                          }}
+                          className="text-blue-600 hover:text-blue-800 text-sm font-medium underline"
+                        >
+                          Edit
+                        </button>
+                      </div>
+                      {inv.status === "OVERDUE" && (
+                        <div className="mt-2">
+                          <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold text-red-700 bg-red-100">
+                            {inv.daysOverdue} {inv.daysOverdue === 1 ? "day" : "days"} overdue
+                          </span>
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-8 py-6">{getStatusBadge(inv.status)}</td>
+                    <td className="px-8 py-6">
+                      {inv.status !== "PAID" && (
+                        <button
+                          onClick={() => {
+                            setSelectedInv(inv);
+                            setPaymentInput(remaining.toFixed(2));
+                            setModalOpen(true);
+                          }}
+                          className="px-5 py-2.5 bg-green-600 text-white font-medium rounded-lg hover:bg-green-700 transition shadow-md"
+                        >
+                          Record Payment
+                        </button>
+                      )}
                     </td>
                   </tr>
-                ) : (
-                  filtered.map((inv) => (
-                    <tr key={inv.id} className="hover:bg-gray-50 dark:hover:bg-zinc-800 transition">
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm font-medium text-gray-900 dark:text-white">
-                          {inv.invoiceNo ?? "—"}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
-                        {inv.customer ?? "—"}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
-                        ${(inv.total ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                        {inv.status === "Partially Paid" && (
-                          <div className="text-xs text-amber-600 dark:text-amber-400">
-                            Received: ${(inv.paidAmount ?? 0).toFixed(2)}
-                          </div>
-                        )}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <select
-                          className="px-3 py-1 rounded-full text-xs font-medium cursor-pointer bg-gray-100 dark:bg-zinc-800 border border-gray-300 dark:border-zinc-700"
-                          value={inv.status ?? "Pending"}
-                          onChange={(e) =>
-                            updateStatus(
-                              inv.id,
-                              e.target.value as Invoice["status"]
-                            )
-                          }
-                        >
-                          <option value="Paid">Paid</option>
-                          <option value="Pending">Pending</option>
-                          <option value="Overdue">Overdue</option>
-                          <option value="Partially Paid">Partially Paid</option>
-                          <option value="Draft">Draft</option>
-                        </select>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-
-          <div className="px-6 py-4 border-t border-gray-200 dark:border-zinc-700 flex items-center justify-between bg-gray-50 dark:bg-zinc-800">
-            <p className="text-sm text-gray-700 dark:text-gray-400">
-              Showing {filtered.length} of {invoices.length} invoices
-            </p>
-          </div>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
+
+        {/* Payment Modal */}
+        {modalOpen && selectedInv && (
+          <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50">
+            <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md">
+              <h2 className="text-2xl font-bold mb-6">Record Payment</h2>
+              <p className="text-lg font-medium text-blue-700 mb-6">Invoice #{selectedInv.invoiceNo}</p>
+              <div className="space-y-4 mb-8 text-sm">
+                <div>Total: <strong>${parseFloat(selectedInv.total).toFixed(2)}</strong></div>
+                <div>Paid: <strong>${parseFloat(selectedInv.paidAmount || "0").toFixed(2)}</strong></div>
+                <div className="text-amber-600 text-lg">
+                  Remaining: <strong>${(parseFloat(selectedInv.total) - parseFloat(selectedInv.paidAmount || "0")).toFixed(2)}</strong>
+                </div>
+              </div>
+              <input
+                type="number"
+                step="0.01"
+                value={paymentInput}
+                onChange={(e) => setPaymentInput(e.target.value)}
+                className="w-full px-5 py-4 border-2 rounded-xl text-lg mb-6 focus:border-blue-500"
+                placeholder="0.00"
+              />
+              <div className="flex justify-end gap-4">
+                <button onClick={() => setModalOpen(false)} className="px-6 py-3 border-2 rounded-xl hover:bg-gray-50">
+                  Cancel
+                </button>
+                <button onClick={recordPayment} className="px-8 py-3 bg-green-600 text-white rounded-xl hover:bg-green-700 font-medium">
+                  Confirm Payment
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Due Date Edit Modal */}
+        {editingDueDate && (
+          <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50">
+            <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md">
+              <h2 className="text-2xl font-bold mb-6">Change Due Date</h2>
+              <p className="text-lg font-medium text-blue-700 mb-6">Invoice #{editingDueDate.invoiceNo}</p>
+
+              <div className="mb-8">
+                <label className="block text-sm font-medium text-gray-700 mb-3">New Due Date</label>
+                <input
+                  type="date"
+                  value={newDueDate}
+                  onChange={(e) => setNewDueDate(e.target.value)}
+                  className="w-full px-5 py-4 border-2 border-gray-300 rounded-xl text-lg focus:border-blue-500 focus:outline-none"
+                />
+              </div>
+
+              <div className="flex justify-end gap-4">
+                <button
+                  onClick={() => {
+                    setEditingDueDate(null);
+                    setNewDueDate("");
+                  }}
+                  className="px-6 py-3 border-2 rounded-xl hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={saveNewDueDate}
+                  className="px-8 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 font-medium"
+                >
+                  Save Due Date
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </main>
     </div>
   );
