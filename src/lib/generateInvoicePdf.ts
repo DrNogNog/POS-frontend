@@ -3,6 +3,27 @@
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import { Payload } from "@/types/estimate";
 
+// === TAX LOGIC (same as your frontend) ===
+const STATE_TAX_MAP: Record<string, number> = {
+  NY: 0.08875,
+  NJ: 0.06625,
+  CT: 0.0635,
+  PA: 0.06,
+  FL: 0.06,
+  CA: 0.0725,
+};
+
+function extractState(billTo?: string): string | undefined {
+  if (!billTo) return undefined;
+  const parts = billTo.split(/[ ,]+/);
+  return parts.find(p => /^[A-Za-z]{2}$/.test(p))?.toUpperCase();
+}
+
+function getTaxRateForState(state: string | undefined): number {
+  if (!state) return 0.08875;
+  return STATE_TAX_MAP[state.trim().toUpperCase()] || 0.08875;
+}
+
 export async function generateInvoicePdf(data: Payload): Promise<Uint8Array> {
   const doc = await PDFDocument.create();
   const page = doc.addPage([612, 792]);
@@ -51,14 +72,14 @@ export async function generateInvoicePdf(data: Payload): Promise<Uint8Array> {
   // === BILL TO & SHIP TO ===
   y = height - margin - 120;
   const boxWidth = (width - 3 * margin) / 2;
-  const boxHeight = 90;
+  const boxWidthHeight = 90;
 
   // Bill To
   page.drawRectangle({
     x: margin,
-    y: y - boxHeight,
+    y: y - boxWidthHeight,
     width: boxWidth,
-    height: boxHeight,
+    height: boxWidthHeight,
     borderWidth: 1.5,
     borderColor: rgb(0, 0, 0),
   });
@@ -68,9 +89,9 @@ export async function generateInvoicePdf(data: Payload): Promise<Uint8Array> {
   // Ship To
   page.drawRectangle({
     x: margin + boxWidth + margin,
-    y: y - boxHeight,
+    y: y - boxWidthHeight,
     width: boxWidth,
-    height: boxHeight,
+    height: boxWidthHeight,
     borderWidth: 1.5,
     borderColor: rgb(0, 0, 0),
   });
@@ -78,7 +99,7 @@ export async function generateInvoicePdf(data: Payload): Promise<Uint8Array> {
   drawLines(page, data.shipTo || data.billTo || "", margin + boxWidth + margin + 12, y - 45, font);
 
   // === TABLE ===
-  y -= boxHeight + 40;
+  y -= boxWidthHeight + 40;
   const tableTop = y;
   const colWidths = [85, 210, 60, 85, 100];
   let x = margin;
@@ -99,29 +120,22 @@ export async function generateInvoicePdf(data: Payload): Promise<Uint8Array> {
   });
 
   y = tableTop - 65;
-  let calculatedSubtotal = 0;
 
   for (const item of data.items) {
     const qty = Number(item.qty) || 1;
     const rate = Number(item.rate) || 0;
     const amount = qty * rate;
-    calculatedSubtotal += amount;
 
     x = margin;
 
-    // Fixed: productId is number → convert to string
     page.drawText(item.productId?.toString() || "", { x: x + 12, y, size: 11, font });
     x += colWidths[0];
-
     page.drawText(item.description || "", { x: x + 12, y, size: 11, font });
     x += colWidths[1];
-
     page.drawText(qty.toString(), { x: x + 25, y, size: 11, font });
     x += colWidths[2];
-
     page.drawText(`$${rate.toFixed(2)}`, { x: x + 12, y, size: 11, font });
     x += colWidths[3];
-
     page.drawText(`$${amount.toFixed(2)}`, { x: x + 12, y, size: 11, font });
 
     y -= 30;
@@ -150,9 +164,9 @@ export async function generateInvoicePdf(data: Payload): Promise<Uint8Array> {
     color: rgb(0.8, 0, 0),
   });
 
-  // === TOTALS BOX ===
-  const totalBoxWidth = 200;
-  const totalBoxHeight = 100;
+  // === TOTALS BOX — NOW USING CORRECT DYNAMIC TAX ===
+  const totalBoxWidth = 220;
+  const totalBoxHeight = 130;
   const totalBoxX = width - margin - totalBoxWidth;
   const totalBoxY = 60;
 
@@ -167,31 +181,39 @@ export async function generateInvoicePdf(data: Payload): Promise<Uint8Array> {
 
   let ty = totalBoxY + totalBoxHeight - 25;
 
-  const nySalesTaxRate = 0.08875;
-  const subtotalAfterDiscount = calculatedSubtotal - (data.discount || 0);
-  const tax = Number((subtotalAfterDiscount * nySalesTaxRate).toFixed(2));
-  const total = subtotalAfterDiscount + tax;
+  // Use values already calculated and passed in Payload
+  const subtotalAfterDiscount = data.subtotal - (data.discount || 0);
+  const taxAmount = data.tax || 0;
+  const finalTotal = data.total || 0;
+
+  // Detect state and show correct tax rate label
+  const state = extractState(data.billTo);
+  const taxRate = getTaxRateForState(state);
+  const taxLabel = state
+    ? `Tax ${state} (${(taxRate * 100).toFixed(3)}%)`
+    : "Tax NY (8.875%)";
 
   page.drawText("Subtotal", { x: totalBoxX + 10, y: ty, size: 13, font });
-  page.drawText(`$${subtotalAfterDiscount.toFixed(2)}`, { x: totalBoxX + 120, y: ty, size: 13, font });
+  page.drawText(`$${subtotalAfterDiscount.toFixed(2)}`, { x: totalBoxX + 130, y: ty, size: 13, font });
   ty -= 28;
 
   if (data.discount && data.discount > 0) {
     page.drawText("Discount", { x: totalBoxX + 10, y: ty, size: 13, font });
-    page.drawText(`-$${data.discount.toFixed(2)}`, { x: totalBoxX + 120, y: ty, size: 13, font });
+    page.drawText(`-$${data.discount.toFixed(2)}`, { x: totalBoxX + 130, y: ty, size: 13, font });
     ty -= 28;
   }
 
-  page.drawText("Tax (8.875%)", { x: totalBoxX + 10, y: ty, size: 13, font });
-  page.drawText(`$${tax.toFixed(2)}`, { x: totalBoxX + 120, y: ty, size: 13, font });
+  page.drawText(taxLabel, { x: totalBoxX + 10, y: ty, size: 13, font });
+  page.drawText(`$${taxAmount.toFixed(2)}`, { x: totalBoxX + 130, y: ty, size: 13, font });
   ty -= 35;
 
   page.drawText("TOTAL", { x: totalBoxX + 10, y: ty, size: 18, font: bold });
-  page.drawText(`$${total.toFixed(2)}`, { x: totalBoxX + 110, y: ty, size: 20, font: bold });
+  page.drawText(`$${finalTotal.toFixed(2)}`, { x: totalBoxX + 120, y: ty, size: 20, font: bold, color: rgb(0.8, 0, 0) });
 
-  // === FINALIZE & DOWNLOAD ===
+  // === FINALIZE ===
   const pdfBytes = await doc.save();
 
+  // Auto-download (optional — you can remove if you only want bytes)
   const blob = new Blob([new Uint8Array(pdfBytes)], { type: "application/pdf" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
@@ -203,7 +225,7 @@ export async function generateInvoicePdf(data: Payload): Promise<Uint8Array> {
   return pdfBytes;
 }
 
-// Helper function
+// Helper: Draw multi-line text
 function drawLines(page: any, text: string, x: number, yStart: number, font: any) {
   const lines = (text || "").split("\n").filter(Boolean);
   let y = yStart;

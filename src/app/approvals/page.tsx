@@ -6,6 +6,44 @@ import { format } from "date-fns";
 import { generateInvoicePdf } from "@/lib/generateInvoicePdf";
 import { Payload } from "@/types/estimate";
 
+const STATE_TAX_MAP: Record<string, number> = {
+  NY: 0.08875,
+  NJ: 0.06625,
+  CT: 0.0635,
+  PA: 0.06,
+  FL: 0.06,
+  CA: 0.0725,
+};
+
+function getTaxRateForState(state: string | undefined): number {
+  if (!state) return 0.08875; // default NY
+  return STATE_TAX_MAP[state.trim().toUpperCase()] || 0.08875;
+}
+
+function extractState(billTo?: string): string | undefined {
+  if (!billTo) return undefined;
+  const parts = billTo.split(/[ ,]+/);
+  return parts.find(p => /^[A-Za-z]{2}$/.test(p))?.toUpperCase();
+}
+
+// Helper: Recalculate total using correct state-based tax
+function calculateDynamicTotal(estimate: Estimate): number {
+  const items = estimate.items || [];
+  const subtotal = items.reduce((sum, item) => {
+    const qty = Number(item.qty) || 0;
+    const rate = Number(item.rate || item.inputcost || 0);
+    return sum + qty * rate;
+  }, 0);
+
+  const discount = Number(estimate.discount) || 0;
+  const state = extractState(estimate.billTo);
+  const taxRate = getTaxRateForState(state);
+  const tax = (subtotal - discount) * taxRate;
+  const total = subtotal - discount + tax;
+
+  return Number(total.toFixed(2));
+}
+
 interface Product {
   id: number;
   name: string;
@@ -19,9 +57,11 @@ interface Product {
 
 interface EstimateItem {
   item: string;
+  sku?: string;
   description?: string;
   qty: number | string;
-  rate: number | string;
+  rate?: number | string;
+  inputcost?: number;
 }
 
 interface Estimate {
@@ -62,10 +102,17 @@ export default function EstimatesPage() {
   async function fetchEstimates() {
     try {
       const res = await fetch("http://localhost:4000/api/estimates");
-      if (!res.ok) throw new Error();
-      const data = await res.json();
-      setEstimates(data);
-    } catch {
+      if (!res.ok) throw new Error("Failed to fetch estimates");
+      const data: Estimate[] = await res.json();
+
+      // Enrich estimates with correct dynamic totals
+      const enriched = data.map(est => ({
+        ...est,
+        total: calculateDynamicTotal(est), // Always show correct tax
+      }));
+
+      setEstimates(enriched);
+    } catch (err) {
       alert("Failed to load estimates — is backend running?");
     } finally {
       setLoading(false);
@@ -113,100 +160,78 @@ export default function EstimatesPage() {
     if (!confirm(`Create invoice from ${estimate.estimateNo}?`)) return;
 
     try {
-      // 1. Fetch full estimate
-      const res = await fetch(`http://localhost:4000/api/estimates/${estimate.id}`);
-      if (!res.ok) throw new Error("Failed to fetch full estimate");
-      const full: Estimate = await res.json();
+      const fullRes = await fetch(`http://localhost:4000/api/estimates/${estimate.id}`);
+      if (!fullRes.ok) throw new Error("Failed to fetch full estimate");
+      const full: Estimate = await fullRes.json();
 
-      // 2. Fetch all products once
       const productsRes = await fetch("http://localhost:4000/api/products");
       if (!productsRes.ok) throw new Error("Failed to fetch products");
       const products: Product[] = await productsRes.json();
-      console.log("here", products)
-      // 3. Resolve items → products (with fallback for old format)
-            // 3. Resolve items → products (supports old & new formats)
-      // Replace your entire resolvedItems block with this:
-            // FINAL VERSION – works with your real data (uses products.name correctly)
+
       const resolvedItems = (full.items || [])
-  .map((i: any) => {
-    const qty = Number(i.qty);
-    const rate = Number(i.rate || i.inputcost);
-    if (isNaN(qty) || qty <= 0 || isNaN(rate)) return null;
+        .map((i: any) => {
+          const qty = Number(i.qty);
+          const rate = Number(i.rate || i.inputcost);
+          if (isNaN(qty) || qty <= 0 || isNaN(rate)) return null;
 
-    // Always convert SKU/item to uppercase for consistent search
-    const productIdentifier = (i.sku || i.item || "").toString().trim().toUpperCase();
-    if (!productIdentifier) return null;
+          const productIdentifier = (i.sku || i.item || "").toString().trim().toUpperCase();
+          if (!productIdentifier) return null;
 
-    // Find product where product.name (also uppercased) matches
-    const product = products.find(
-      (p) => p.name.trim().toUpperCase() === productIdentifier
-    );
+          const product = products.find(
+            p => p.name.trim().toUpperCase() === productIdentifier
+          );
 
-    if (!product) {
-      throw new Error(
-        `Product not found in inventory!\n` +
-        `SKU/Item: "${productIdentifier}"\n` +
-        `Line: ${JSON.stringify(i)}\n\n` +
-        `Available product names (SKUs): ${products.map(p => p.name).join(', ')}`
-      );
-    }
+          if (!product) {
+            throw new Error(
+              `Product not found: "${productIdentifier}"\nAvailable: ${products.map(p => p.name).join(", ")}`
+            );
+          }
 
-    return {
-      product,                                    
-      qty,
-      rate,
-      description: i.description || product.description || product.name,
-    };
-  })
-  .filter(Boolean) as {
-    product: Product;
-    qty: number;
-    rate: number;
-    description: string;
-  }[];
-
+          return {
+            product,
+            qty,
+            rate,
+            description: i.description || product.description || product.name,
+          };
+        })
+        .filter(Boolean) as { product: Product; qty: number; rate: number; description: string }[];
 
       if (resolvedItems.length === 0) {
-        alert("No valid items found to invoice.");
+        alert("No valid items to invoice.");
         return;
       }
 
-      // 4. Build invoice items for PDF
-      const invoiceItems: InvoiceItem[] = resolvedItems.map(
-        ({ product, qty, rate, description }) => ({
-          productId: product.id,
-          description,
-          qty,
-          rate,
-          amount: qty * rate,
-        })
-      );
+      const invoiceItems: InvoiceItem[] = resolvedItems.map(({ product, qty, rate, description }) => ({
+        productId: product.id,
+        description,
+        qty,
+        rate,
+        amount: qty * rate,
+      }));
 
-      // 5. Build stock decrement payload — using the already-resolved product
-     const productsToDecrement = resolvedItems.map(({ product, qty }) => ({
-      name: product.name.trim(),
-      quantity: Number(qty),  // ← THIS FIXES 95% OF 500 ERRORS
-    }));
-
-    const stockRes = await fetch("http://localhost:4000/api/products/decrement-stock", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ items: productsToDecrement }),
-    });
-
-    if (!stockRes.ok) {
-      const err = await stockRes.text();
-      throw new Error(`Stock update failed: ${err}`);
-    }
-
-      // 7. Calculate totals
       const subtotal = invoiceItems.reduce((acc, i) => acc + i.amount, 0);
       const discount = Number(full.discount) || 0;
-      const taxRate = full.tax ? Number(full.tax) / 100 : 0.08875;
+      const state = extractState(full.billTo);
+      const taxRate = getTaxRateForState(state);
       const tax = (subtotal - discount) * taxRate;
       const total = subtotal - discount + tax;
 
-      // 8. Generate invoice number and PDF
+      const productsToDecrement = resolvedItems.map(({ product, qty }) => ({
+        name: product.name.trim(),
+        quantity: qty,
+      }));
+
+      const stockRes = await fetch("http://localhost:4000/api/products/decrement-stock", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ items: productsToDecrement }),
+      });
+
+      if (!stockRes.ok) {
+        const err = await stockRes.text();
+        throw new Error(`Stock update failed: ${err}`);
+      }
+
       const invoiceNo = estimate.estimateNo.replace("EST", "INV");
       const today = new Date().toISOString().slice(0, 10);
       const time = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
@@ -232,7 +257,6 @@ export default function EstimatesPage() {
       const pdfBytes = await generateInvoicePdf(invoiceData);
       const base64Pdf = Buffer.from(pdfBytes).toString("base64");
 
-      // 9. Save invoice
       const postRes = await fetch("http://localhost:4000/api/invoices", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -248,15 +272,14 @@ export default function EstimatesPage() {
         throw new Error(`Failed to save invoice: ${errText}`);
       }
 
-      // 10. Mark estimate as invoiced
       await fetch(`http://localhost:4000/api/estimates/${estimate.id}/invoiced`, {
         method: "PATCH",
       });
 
-      alert(`Invoice ${invoiceNo} created and stock updated successfully!`);
+      alert(`Invoice ${invoiceNo} created successfully!`);
       fetchEstimates();
     } catch (err: any) {
-      console.error("Failed to create invoice:", err);
+      console.error(err);
       alert(err.message || "Failed to create invoice.");
     }
   }
@@ -276,6 +299,7 @@ export default function EstimatesPage() {
                 <th className="px-6 py-4 text-left">Estimate #</th>
                 <th className="px-6 py-4 text-left">Date</th>
                 <th className="px-6 py-4 text-left">Customer</th>
+                <th className="px-6 py-4 text-left">State / Tax</th>
                 <th className="px-6 py-4 text-right">Total</th>
                 <th className="px-6 py-4 text-center">Approved</th>
                 <th className="px-6 py-4 text-center">Invoiced</th>
@@ -286,70 +310,77 @@ export default function EstimatesPage() {
             <tbody className="divide-y divide-gray-200">
               {estimates.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-6 py-20 text-center text-gray-500 text-lg">
+                  <td colSpan={8} className="px-6 py-20 text-center text-gray-500 text-lg">
                     No estimates yet.
                   </td>
                 </tr>
               ) : (
-                estimates.map((est) => (
-                  <tr key={est.id} className="hover:bg-gray-50 transition">
-                    <td className="px-6 py-4 text-indigo-600 font-medium">{est.estimateNo}</td>
-                    <td className="px-6 py-4 text-gray-600">
-                      {format(new Date(est.date), "MMM dd, yyyy")}
-                    </td>
-                    <td className="px-6 py-4">{est.billTo || "-"}</td>
-                    <td className="px-6 py-4 text-right font-semibold text-green-600">
-                      ${est.total?.toFixed(2) ?? "0.00"}
-                    </td>
+                estimates.map((est) => {
+                  const state = extractState(est.billTo);
+                  const taxRate = getTaxRateForState(state);
+                  const displayState = state || "NY";
+                  const displayTax = (taxRate * 100).toFixed(3) + "%";
 
-                    <td className="px-6 py-4 text-center">
-                      <input
-                        type="checkbox"
-                        checked={est.approved}
-                        onChange={() => toggleApproved(est.id, est.approved)}
-                        className="w-5 h-5 text-indigo-600 rounded cursor-pointer"
-                      />
-                    </td>
+                  return (
+                    <tr key={est.id} className="hover:bg-gray-50 transition">
+                      <td className="px-6 py-4 text-indigo-600 font-medium">{est.estimateNo}</td>
+                      <td className="px-6 py-4 text-gray-600">
+                        {format(new Date(est.date), "MMM dd, yyyy")}
+                      </td>
+                      <td className="px-6 py-4">{est.billTo || "-"}</td>
+                      <td className="px-6 py-4 text-sm font-medium text-indigo-600">
+                        {displayState} ({displayTax})
+                      </td>
+                      <td className="px-6 py-4 text-right font-semibold text-green-600">
+                        ${est.total?.toFixed(2) ?? "0.00"}
+                      </td>
+                      <td className="px-6 py-4 text-center">
+                        <input
+                          type="checkbox"
+                          checked={est.approved}
+                          onChange={() => toggleApproved(est.id, est.approved)}
+                          className="w-5 h-5 text-indigo-600 rounded cursor-pointer"
+                        />
+                      </td>
+                      <td className="px-6 py-4 text-center">
+                        {est.invoiced ? (
+                          <span className="text-green-600 font-semibold">Yes</span>
+                        ) : (
+                          <span className="text-gray-500">No</span>
+                        )}
+                      </td>
+                      <td className="px-6 py-4 text-center">
+                        <div className="flex justify-center gap-3">
+                          <button
+                            onClick={() => viewEstimate(est.id)}
+                            className="px-4 py-2 bg-blue-600 text-white rounded text-sm hover:bg-blue-700 transition"
+                          >
+                            View PDF
+                          </button>
 
-                    <td className="px-6 py-4 text-center">
-                      {est.invoiced ? (
-                        <span className="text-green-600 font-semibold">Yes</span>
-                      ) : (
-                        <span className="text-gray-500">No</span>
-                      )}
-                    </td>
+                          <button
+                            onClick={() => createInvoice(est)}
+                            disabled={!est.approved || est.invoiced}
+                            className={`px-4 py-2 text-sm rounded transition ${
+                              est.approved && !est.invoiced
+                                ? "bg-indigo-600 text-white hover:bg-indigo-700"
+                                : "bg-gray-300 text-gray-500 cursor-not-allowed"
+                            }`}
+                          >
+                            Create Invoice
+                          </button>
 
-                    <td className="px-6 py-4 text-center">
-                      <div className="flex justify-center gap-3">
-                        <button
-                          onClick={() => viewEstimate(est.id)}
-                          className="px-4 py-2 bg-blue-600 text-white rounded text-sm hover:bg-blue-700 transition"
-                        >
-                          View PDF
-                        </button>
-
-                        <button
-                          onClick={() => createInvoice(est)}
-                          disabled={!est.approved || est.invoiced}
-                          className={`px-4 py-2 text-sm rounded transition ${
-                            est.approved && !est.invoiced
-                              ? "bg-indigo-600 text-white hover:bg-indigo-700"
-                              : "bg-gray-300 text-gray-500 cursor-not-allowed"
-                          }`}
-                        >
-                          Create Invoice
-                        </button>
-
-                        <button
-                          onClick={() => deleteEstimate(est.id, est.estimateNo)}
-                          className="px-4 py-2 bg-red-600 text-white rounded text-sm hover:bg-red-700 transition"
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
+                          <button
+                            onClick={() => deleteEstimate(est.id, est.estimateNo)}
+                            className="px-4 py-2 bg-red-600 text-white rounded text-sm hover:bg-red-700 transition"
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
