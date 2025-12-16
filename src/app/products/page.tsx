@@ -129,40 +129,81 @@ export default function ProductsPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [orderModalProduct, setOrderModalProduct] = useState<Product | null>(null);
 
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const allColumns = ["Item", "Description", "Cost", "Stock", "Vendors", "Actions"];
   const [visibleColumns, setVisibleColumns] = useState<Set<string>>(new Set(allColumns));
 
-  const loadProducts = async () => {
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [loading, setLoading] = useState(false);
+  const pageSize = 100;
+
+  // Load products from backend
+  const loadProducts = async (page: number = 1) => {
+    if (loading) return;
+    setLoading(true);
     try {
-      const res = await api("/products");
-      const data: any[] = Array.isArray(res) ? res : [];
-      const normalized: Product[] = data.map((p) => ({
+      const res = await api(`/products?page=${page}&limit=${pageSize}`);
+      const { products: data, total } = res;
+
+      const normalized: Product[] = (data || []).map((p: any) => ({
         ...p,
         id: String(p.id),
         inputcost: Number(p.inputcost || 0),
         stock: p.stock ?? 0,
         vendors: p.vendors ?? [],
       }));
-      setProducts(normalized);
-    } catch {
-      setProducts([]);
+
+      // Append and deduplicate
+      setProducts((prev) => {
+        const merged = [...prev, ...normalized];
+        return merged.filter((p, i, arr) => arr.findIndex((x) => x.id === p.id) === i);
+      });
+
+      setTotalPages(Math.ceil(total / pageSize));
+      setCurrentPage(page);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
     }
   };
 
   useEffect(() => {
-    if (activePage === "Item Library") loadProducts();
+    if (activePage === "Item Library") loadProducts(1);
   }, [activePage]);
 
+  // Infinite scroll
+  useEffect(() => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+
+    const handleScroll = () => {
+      if (
+        container.scrollTop + container.clientHeight >=
+        container.scrollHeight - 100
+      ) {
+        if (!loading && currentPage < totalPages) {
+          loadProducts(currentPage + 1);
+        }
+      }
+    };
+
+    container.addEventListener("scroll", handleScroll);
+    return () => container.removeEventListener("scroll", handleScroll);
+  }, [currentPage, totalPages, loading]);
+
+  // Filtered products
   const filteredProducts = useMemo(() => {
     const query = searchQuery.toUpperCase().trim();
     if (!query) return products;
     return products.filter(
       (p) =>
         p.name.toUpperCase().includes(query) ||
-        (p.description?.includes(query) ?? false) ||
-        p.vendors?.some((v) => v.includes(query))
+        (p.description?.toUpperCase().includes(query) ?? false) ||
+        p.vendors?.some((v) => v.toUpperCase().includes(query))
     );
   }, [searchQuery, products]);
 
@@ -178,10 +219,7 @@ export default function ProductsPage() {
 
   const duplicateProduct = async (product: Product) => {
     try {
-      const body = {
-        ...product,
-        name: product.name.toUpperCase(),
-      };
+      const body = { ...product, name: product.name.toUpperCase() };
       const res = await fetch("http://localhost:4000/api/products/duplicate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -260,7 +298,6 @@ export default function ProductsPage() {
       created.id = String(created.id);
 
       setProducts((prev) => [...prev, created]);
-      loadProducts();
       setNewName("");
       setNewInputCost("");
       setNewDescription("");
@@ -337,7 +374,10 @@ export default function ProductsPage() {
             </div>
 
             <div className="bg-white dark:bg-zinc-900 rounded-xl shadow-xl border">
-              <div className="h-[calc(100vh-150px)] overflow-y-auto">
+              <div
+                className="h-[calc(100vh-150px)] overflow-y-auto"
+                ref={scrollContainerRef}
+              >
                 <table className="w-full">
                   <thead className="bg-zinc-50 dark:bg-zinc-800 border-b sticky top-0 z-10">
                     <tr>
@@ -356,7 +396,7 @@ export default function ProductsPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {products.map((product) => (
+                    {filteredProducts.map((product) => (
                       <ProductTableRow
                         key={product.id}
                         product={product}
