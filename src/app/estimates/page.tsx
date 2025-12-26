@@ -76,7 +76,8 @@ export default function InvoicesPage() {
         const res = await fetch("http://localhost:4000/api/products");
         if (!res.ok) throw new Error(`Fetch products failed (${res.status})`);
         const data: Product[] = await res.json();
-        if (mounted) setProducts(data);
+        const json = await res.json();
+        setProducts(json.products);
       } catch (err) {
         console.error("Failed to fetch products:", err);
       }
@@ -101,7 +102,7 @@ const computeExpectedRate = useCallback(
   },
   [markupTier]
 );
-const updateRow = useCallback(
+  const updateRow = useCallback(
   (index: number, field: keyof ItemRow, value: string | number) => {
     setItems((prev) => {
       if (index < 0 || index >= prev.length) return prev;
@@ -113,10 +114,10 @@ const updateRow = useCallback(
         if (field === "sku") {
           const skuVal = String(value || "").trim();
           const found = products.find(
-            (p) =>
-              p.id.toString() === skuVal ||
-              p.name.toLowerCase() === skuVal.toLowerCase()
-          );
+  (p) =>
+    p.id.toString() === skuVal ||
+    p.name.toLowerCase() === skuVal.toLowerCase()
+);
           if (found) {
             return {
               ...row,
@@ -130,19 +131,9 @@ const updateRow = useCallback(
           }
         }
 
-        if (field === "description") {
-          return { ...row, description: String(value) };
-        }
-
-        if (field === "qty") {
-          const qty = value === "" ? "" : Number(value);
-          return { ...row, qty };
-        }
-
-        if (field === "rate") {
-          const rate = value === "" ? "" : toFixedNumber(Number(value));
-          return { ...row, rate };
-        }
+        if (field === "description") return { ...row, description: String(value) };
+        if (field === "qty") return { ...row, qty: value === "" ? "" : Number(value) };
+        if (field === "rate") return { ...row, rate: value === "" ? "" : toFixedNumber(Number(value)) };
 
         return row;
       });
@@ -150,6 +141,7 @@ const updateRow = useCallback(
   },
   [products, computeExpectedRate]
 );
+
 
 
   // When markup tier changes, update rows' rate where appropriate.
