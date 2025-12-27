@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useState } from "react";
 import Sidebar from "@/components/sidebar";
 import { generateEstimatePdf } from "@/lib/generateEstimatePdf";
 
@@ -15,10 +15,12 @@ type ItemRow = {
 type Product = {
   id: number;
   name: string;
+  sku: string;
   description: string;
   inputcost: number;
   vendors: string[];
 };
+
 interface InvoiceItem {
   productId: number;
   description: string;
@@ -26,6 +28,7 @@ interface InvoiceItem {
   rate: number;
   amount: number;
 }
+
 type MarkupKey = "AA" | "A" | "B" | "C" | "D";
 
 const MARKUP_RATES: Record<MarkupKey, number> = {
@@ -58,178 +61,138 @@ export default function InvoicesPage() {
   const [billTo, setBillTo] = useState("");
   const [shipTo, setShipTo] = useState("");
 
-  // Items and products
-  const [items, setItems] = useState<ItemRow[]>(
-    Array.from({ length: 10 }, () => makeEmptyRow())
-  );
-  const [products, setProducts] = useState<Product[]>([]);
+  // Items
+  const [items, setItems] = useState<ItemRow[]>(Array.from({ length: 10 }, () => makeEmptyRow()));
 
   // Pricing controls
   const [markupTier, setMarkupTier] = useState<MarkupKey>("AA");
   const [discountPercent, setDiscountPercent] = useState<number | "">("");
 
-  // Fetch products on mount
-  useEffect(() => {
-    let mounted = true;
-    const fetchProducts = async () => {
-      try {
-        const res = await fetch("http://localhost:4000/api/products");
-        if (!res.ok) throw new Error(`Fetch products failed (${res.status})`);
-        const data: Product[] = await res.json();
-        if (mounted) setProducts(data);
-      } catch (err) {
-        console.error("Failed to fetch products:", err);
-      }
-    };
-    fetchProducts();
-    return () => {
-      mounted = false;
-    };
-  }, []);
-
-  // helpers
+  // Helper: fixed numbers
   const toFixedNumber = (v: number | string, places = 2): number => {
-  const num = Number(v);
-  return Number.isNaN(num) ? 0 : Number(num.toFixed(places));
-};
+    const num = Number(v);
+    return Number.isNaN(num) ? 0 : Number(num.toFixed(places));
+  };
 
-const computeExpectedRate = useCallback(
-  (baseRate: number | "", tier?: MarkupKey): number => {
-    const markup = tier ? MARKUP_RATES[tier] : MARKUP_RATES[markupTier];
-    const cost = typeof baseRate === "number" ? baseRate : Number(baseRate || 0);
-    return toFixedNumber(cost * (1 + markup));
-  },
-  [markupTier]
-);
-const updateRow = useCallback(
-  (index: number, field: keyof ItemRow, value: string | number) => {
-    setItems((prev) => {
-      if (index < 0 || index >= prev.length) return prev;
+  // Compute expected rate
+  const computeExpectedRate = useCallback(
+    (baseRate: number | "", tier?: MarkupKey): number => {
+      const markup = tier ? MARKUP_RATES[tier] : MARKUP_RATES[markupTier];
+      const cost = typeof baseRate === "number" ? baseRate : Number(baseRate || 0);
+      return toFixedNumber(cost * (1 + markup));
+    },
+    [markupTier]
+  );
 
-      return prev.map((r, i) => {
-        if (i !== index) return r;
-        const row: ItemRow = { ...r };
+  // Update row with SKU search
+  const updateRow = useCallback(
+    async (index: number, field: keyof ItemRow, value: string | number) => {
+      if (field === "sku") {
+        const skuVal = String(value || "").trim();
 
-        if (field === "sku") {
-          const skuVal = String(value || "").trim();
-          const found = products.find(
-            (p) =>
-              p.id.toString() === skuVal ||
-              p.name.toLowerCase() === skuVal.toLowerCase()
-          );
-          if (found) {
-            return {
-              ...row,
-              sku: skuVal,
-              description: found.description || "",
-              baseRate: found.inputcost,
-              rate: computeExpectedRate(found.inputcost),
-            };
-          } else {
-            return { ...row, sku: skuVal, description: "", baseRate: "", rate: "" };
+        // Fetch matching product from backend
+        let found: Product | undefined;
+        if (skuVal) {
+          try {
+            const res = await fetch(`http://localhost:4000/api/products/search?query=${skuVal}`);
+            const data = await res.json();
+            found = Array.isArray(data.products) && data.products.length > 0 ? data.products[0] : undefined;
+          } catch (err) {
+            console.error("Error searching product:", err);
           }
         }
 
-        if (field === "description") {
-          return { ...row, description: String(value) };
-        }
+        setItems((prev) =>
+          prev.map((r, i) => {
+            if (i !== index) return r;
+            return found
+              ? {
+                  ...r,
+                  sku: skuVal,
+                  description: found.description || "",
+                  baseRate: found.inputcost,
+                  rate: computeExpectedRate(found.inputcost),
+                }
+              : { ...r, sku: skuVal, description: "", baseRate: "", rate: "" };
+          })
+        );
 
-        if (field === "qty") {
-          const qty = value === "" ? "" : Number(value);
-          return { ...row, qty };
-        }
+        return;
+      }
 
-        if (field === "rate") {
-          const rate = value === "" ? "" : toFixedNumber(Number(value));
-          return { ...row, rate };
-        }
+      // Other fields
+      setItems((prev) =>
+        prev.map((r, i) => {
+          if (i !== index) return r;
+          if (field === "description") return { ...r, description: String(value) };
+          if (field === "qty") return { ...r, qty: value === "" ? "" : Number(value) };
+          if (field === "rate") return { ...r, rate: value === "" ? "" : toFixedNumber(Number(value)) };
+          return r;
+        })
+      );
+    },
+    [computeExpectedRate]
+  );
 
-        return row;
-      });
-    });
-  },
-  [products, computeExpectedRate]
-);
+  // Markup tier change
+  const handleMarkupChange = useCallback(
+    (nextTier: MarkupKey) => {
+      setMarkupTier(nextTier);
+      setItems((prev) =>
+        prev.map((row) => {
+          const baseIsNum = row.baseRate !== "" && !Number.isNaN(Number(row.baseRate));
+          if (!baseIsNum) return row;
+          const expected = computeExpectedRate(Number(row.baseRate), nextTier);
+          return { ...row, rate: expected };
+        })
+      );
+    },
+    [computeExpectedRate]
+  );
 
-
-  // When markup tier changes, update rows' rate where appropriate.
-  // We always return a new row object for each item that gets processed so React re-renders.
-const handleMarkupChange = useCallback(
-  (nextTier: MarkupKey) => {
-    setMarkupTier(nextTier);
-    setItems((prev) =>
-      prev.map((row) => {
-        const baseIsNum = row.baseRate !== "" && !Number.isNaN(Number(row.baseRate));
-        if (!baseIsNum) return row;
-
-        // compute rate using new tier
-        const expected = computeExpectedRate(Number(row.baseRate), nextTier);
-
-        return { ...row, rate: expected }; // overwrite rate
-      })
-    );
-  },
-  [computeExpectedRate]
-);
-
-
-
-  // Clean and efficient totals calculation
-  const { subtotal, discountAmount, total } = useMemo(() => {
-    // Map to numeric sanitized rows once
+  // Totals calculation
+  const { subtotal, discountAmount, total } = (() => {
     const numericRows = items.map((r) => ({
       qty: typeof r.qty === "number" ? r.qty : 0,
       rate: typeof r.rate === "number" ? r.rate : Number(r.rate || 0),
     }));
-
     const subtotal = numericRows.reduce((acc, r) => acc + r.qty * r.rate, 0);
-
     const discountPct = discountPercent === "" ? 0 : Number(discountPercent) / 100;
     const discountAmount = subtotal * discountPct;
     const total = subtotal - discountAmount;
-
     return {
       subtotal: toFixedNumber(subtotal),
       discountAmount: toFixedNumber(discountAmount),
       total: toFixedNumber(total),
     };
-  }, [items, discountPercent]);
+  })();
 
-  // PDF generation & save (clean payload)
-  async function handleGeneratePdf() {
+  // PDF generation
+  const handleGeneratePdf = async () => {
     const invoiceNo = `INV-${String(Date.now()).slice(-6)}`;
     const cleanItems: InvoiceItem[] = items
-    .filter((item) => item.sku.trim() !== "" && item.qty !== "" && item.rate !== "")
-    .map((item) => {
-      const product = products.find(
-        (p) =>
-          p.id.toString() === item.sku ||
-          p.name.toLowerCase() === item.sku.toLowerCase()
-      );
-
-      return {
-        productId: product?.id ?? 0, // or null if allowed
-        sku: item.sku.trim(),
-        qty: Number(item.qty),
+      .filter((item) => item.sku.trim() !== "" && item.qty !== "" && item.rate !== "")
+      .map((item) => ({
+        productId: 0, // You can extend to include productId if needed
         description: item.description || "—",
+        qty: Number(item.qty),
         rate: Number(item.rate),
         amount: Number(item.qty) * Number(item.rate),
-      };
-    });
+      }));
 
     const payload = {
       companyName: companyName || "Your Company",
-      companyAddr1: companyAddr1 || "",
-      companyAddr2: companyAddr2 || "",
-      phone: phone || "",
-      fax: fax || "",
-      email: email || "",
-      website: website || "",
+      companyAddr1,
+      companyAddr2,
+      phone,
+      fax,
+      email,
+      website,
       date,
-      estimateNo: estimateNo || "",
+      estimateNo,
       invoiceNo,
-      billTo: billTo || "",
-      shipTo: shipTo || "",
+      billTo,
+      shipTo,
       items: cleanItems,
       discountPercent: discountPercent === "" ? 0 : Number(discountPercent),
       markupTier,
@@ -250,29 +213,19 @@ const handleMarkupChange = useCallback(
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ ...payload, pdfData: base64Pdf }),
         });
-
-        if (res.ok) {
-          alert(
-            `Estimate saved successfully!\nInvoice #: ${invoiceNo}\nMarkup Tier: ${markupTier} (${(
-              MARKUP_RATES[markupTier] * 100
-            ).toFixed(0)}%)`
-          );
-        } else {
-          alert("PDF generated, but failed to save to database.");
-        }
+        if (res.ok) alert(`Estimate saved! Invoice #: ${invoiceNo}`);
+        else alert("PDF generated but failed to save.");
       };
       reader.readAsDataURL(pdfBlob);
     } catch (err) {
-      console.error("PDF generation error:", err);
-      alert("Failed to generate or save estimate. Check console for details.");
+      console.error(err);
+      alert("Failed to generate or save estimate.");
     }
-  }
+  };
 
-  // UI render
   return (
     <div className="flex min-h-screen">
       <Sidebar />
-
       <main className="flex-1 p-6 bg-gray-50">
         <h1 className="text-3xl font-bold mb-6 text-gray-800">Create Estimate</h1>
 
@@ -298,11 +251,7 @@ const handleMarkupChange = useCallback(
         {/* Markup Tier */}
         <section className="bg-gradient-to-r from-green-50 to-blue-50 p-8 rounded-xl shadow-lg mb-6 border-2 border-green-300">
           <div className="flex items-center gap-6">
-            <select
-              value={markupTier}
-              onChange={(e) => handleMarkupChange(e.target.value as MarkupKey)}
-              className="px-8 py-4 text-2xl font-bold bg-white border-4 border-green-600 rounded-xl shadow-lg focus:outline-none focus:ring-4 focus:ring-green-300 cursor-pointer transition"
-            >
+            <select value={markupTier} onChange={(e) => handleMarkupChange(e.target.value as MarkupKey)} className="px-8 py-4 text-2xl font-bold bg-white border-4 border-green-600 rounded-xl shadow-lg focus:outline-none focus:ring-4 focus:ring-green-300 cursor-pointer transition">
               <option value="AA">AA — 0%</option>
               <option value="A">A — 50%</option>
               <option value="B">B — 60%</option>
@@ -347,7 +296,7 @@ const handleMarkupChange = useCallback(
                     <td className="border px-3 py-2 align-top">
                       <input
                         className="w-full text-center rounded px-2 py-1"
-                        value={row.qty}
+                        value={row.qty !== "" && row.qty != null ? row.qty : ""}
                         onChange={(e) => updateRow(i, "qty", e.target.value === "" ? "" : Number(e.target.value))}
                         type="number"
                         min={0}
@@ -356,14 +305,14 @@ const handleMarkupChange = useCallback(
                     <td className="border px-3 py-2 align-top">
                       <input
                         className="w-full bg-gray-50 rounded px-2 py-1"
-                        value={row.description}
+                        value={row.description !== "" && row.description != null ? row.description : ""}
                         onChange={(e) => updateRow(i, "description", e.target.value)}
                       />
                     </td>
                     <td className="border px-3 py-2 align-top">
                       <input
                         className="w-full text-right font-medium text-blue-700 bg-blue-50 rounded px-2 py-1 focus:ring-2 focus:ring-blue-400"
-                        value={row.rate}
+                        value={row.rate !== "" && row.rate != null ? row.rate : ""}
                         onChange={(e) => updateRow(i, "rate", e.target.value === "" ? "" : Number(e.target.value))}
                         type="number"
                         step="0.01"
@@ -403,7 +352,7 @@ const handleMarkupChange = useCallback(
             <input
               type="number"
               step="0.01"
-              value={discountPercent}
+              value={discountPercent !== "" && discountPercent != null ? discountPercent : ""}
               onChange={(e) => setDiscountPercent(e.target.value === "" ? "" : Number(e.target.value))}
               className="w-32 px-4 py-3 border-2 border-green-500 rounded-lg text-lg font-bold focus:outline-none focus:ring-4 focus:ring-green-300"
               placeholder="0"
@@ -411,7 +360,6 @@ const handleMarkupChange = useCallback(
           </div>
         </section>
 
-        {/* Generate Button */}
         <div className="mt-8">
           <button
             onClick={handleGeneratePdf}

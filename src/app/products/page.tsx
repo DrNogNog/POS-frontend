@@ -141,35 +141,38 @@ export default function ProductsPage() {
   const pageSize = 100;
 
   // Load products from backend
-  const loadProducts = async (page: number = 1) => {
-    if (loading) return;
-    setLoading(true);
-    try {
-      const res = await api(`/products?page=${page}&limit=${pageSize}`);
-      const { products: data, total } = res;
+  const loadProducts = async (page = 1, reset = false) => {
+  if (loading) return;
+  setLoading(true);
 
-      const normalized: Product[] = (data || []).map((p: any) => ({
-        ...p,
-        id: String(p.id),
-        inputcost: Number(p.inputcost || 0),
-        stock: p.stock ?? 0,
-        vendors: p.vendors ?? [],
-      }));
+  const q = encodeURIComponent(searchQuery.trim());
+  const res = await api(`/products?page=${page}&limit=${pageSize}&search=${q}`);
+  const { products: data, total } = res as { products: Product[]; total: number };
 
-      // Append and deduplicate
-      setProducts((prev) => {
-        const merged = [...prev, ...normalized];
-        return merged.filter((p, i, arr) => arr.findIndex((x) => x.id === p.id) === i);
-      });
+  setProducts((prev: Product[]) =>
+    reset
+      ? data
+      : [
+          ...prev,
+          ...data.filter((p: Product) => !prev.find((x: Product) => x.id === p.id)),
+        ]
+  );
 
-      setTotalPages(Math.ceil(total / pageSize));
-      setCurrentPage(page);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  };
+  setTotalPages(Math.ceil(total / pageSize));
+  setCurrentPage(page);
+  setLoading(false);
+};
+
+useEffect(() => {
+  const handler = setTimeout(() => {
+    setProducts([]);
+    setCurrentPage(1);
+    loadProducts(1, true);
+  }, 300); // debounce so we don't DDOS ourselves
+
+  return () => clearTimeout(handler);
+}, [searchQuery]);
+
 
   useEffect(() => {
     if (activePage === "Item Library") loadProducts(1);
