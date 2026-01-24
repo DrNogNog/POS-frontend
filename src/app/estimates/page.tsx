@@ -70,23 +70,30 @@ export default function InvoicesPage() {
 
   // Fetch products on mount
   useEffect(() => {
-    let mounted = true;
-    const fetchProducts = async () => {
-      try {
-        const res = await fetch("http://localhost:4000/api/products");
-        if (!res.ok) throw new Error(`Fetch products failed (${res.status})`);
-        const data: Product[] = await res.json();
-        const json = await res.json();
-        setProducts(json.products);
-      } catch (err) {
-        console.error("Failed to fetch products:", err);
-      }
-    };
-    fetchProducts();
-    return () => {
-      mounted = false;
-    };
-  }, []);
+  const fetchProducts = async () => {
+    try {
+      const res = await fetch("http://localhost:4000/api/products");
+      if (!res.ok) throw new Error(`Fetch products failed (${res.status})`);
+
+      const json = await res.json(); // ✅ read ONCE
+
+      // adjust based on your backend shape
+      const products: Product[] = Array.isArray(json)
+        ? json
+        : Array.isArray(json.products)
+        ? json.products
+        : [];
+
+      setProducts(products);
+    } catch (err) {
+      console.error("Failed to fetch products:", err);
+      setProducts([]);
+    }
+  };
+
+  fetchProducts();
+}, []);
+
 
   // helpers
   const toFixedNumber = (v: number | string, places = 2): number => {
