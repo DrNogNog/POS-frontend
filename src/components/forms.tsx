@@ -113,7 +113,7 @@ export function CustomerForm({
             </Select>
           </Field>
         ) : (
-          <Field label="Price level" hint="Hidden — use Show price levels at the top to change">
+          <Field label="Price level" hint="Hidden — click Price levels at the top to change it">
             <Input value="••••" disabled />
           </Field>
         )}
@@ -131,8 +131,8 @@ export function CustomerForm({
           {f.taxExempt && <Input placeholder="Exemption certificate #" value={f.taxExemptId} onChange={(e) => set("taxExemptId", e.target.value)} />}
         </div>
       </div>
-      <fieldset className="mt-6 rounded-md border border-hairline p-4">
-        <legend className="px-1 text-sm font-medium text-walnut">Card on file</legend>
+      <fieldset className="mt-6 rounded-lux border border-hairline px-8 py-6">
+        <legend className="px-2 font-display text-lg font-semibold text-walnut">Card on file</legend>
         <p className="mb-3 text-xs text-oak">
           For safety we only keep the brand, last 4 digits, expiry, and your card processor&apos;s token — never the full card number.
         </p>
@@ -239,8 +239,8 @@ export function SupplierForm({
         <Field label="Address"><Textarea value={f.address} onChange={(e) => set("address", e.target.value)} /></Field>
         <Field label="Our account number with them"><Input value={f.accountNumber} onChange={(e) => set("accountNumber", e.target.value)} /></Field>
       </div>
-      <fieldset className="mt-6 rounded-md border border-hairline p-4">
-        <legend className="px-1 text-sm font-medium text-walnut">Contract terms</legend>
+      <fieldset className="mt-6 rounded-lux border border-hairline px-8 py-6">
+        <legend className="px-2 font-display text-lg font-semibold text-walnut">Contract terms</legend>
         <div className="grid gap-4 sm:grid-cols-3">
           <Field label="Pay within">
             <Select value={f.paymentTermsDays} onChange={(e) => set("paymentTermsDays", Number(e.target.value))}>
@@ -393,8 +393,8 @@ export function ProductForm({
         <Field label="Collection / door style"><Input value={f.collection} onChange={(e) => set("collection", e.target.value)} /></Field>
         <Field label="Description" className="sm:col-span-3"><Textarea value={f.description} onChange={(e) => set("description", e.target.value)} /></Field>
       </div>
-      <fieldset className="mt-5 rounded-md border border-hairline p-4">
-        <legend className="px-1 text-sm font-medium text-walnut">Price in and price out</legend>
+      <fieldset className="mt-5 rounded-lux border border-hairline px-8 py-6">
+        <legend className="px-2 font-display text-lg font-semibold text-walnut">Price in and price out</legend>
         <div className="grid gap-4 sm:grid-cols-4">
           <Field label="Supplier list price"><Input type="number" step="0.01" min={0} value={f.listPrice} onChange={(e) => set("listPrice", e.target.value)} /></Field>
           <Field label="Supplier discount (%)"><Input type="number" step="0.01" min={0} max={100} value={f.supplierDiscountPct} onChange={(e) => set("supplierDiscountPct", e.target.value)} /></Field>
@@ -499,7 +499,7 @@ export function PaymentDialog({
         </>
       }
     >
-      <div className="mb-4 rounded-md bg-linen p-3 text-sm">
+      <div className="mb-4 rounded-lux bg-linen px-6 py-4 text-sm">
         Balance due <b className="num">{money(balance)}</b>
         {discount > 0 && (
           <div className="mt-1 text-paid">

@@ -34,13 +34,13 @@ export default function AgingBars({
               type="button"
               onClick={() => onSelect?.(selected === b.key ? "" : b.key)}
               className={cn(
-                "grid w-full grid-cols-[9.5rem_1fr_7rem] items-center gap-3 rounded-md px-2 py-1 text-left text-sm hover:bg-linen",
+                "grid w-full grid-cols-[9.5rem_1fr_7rem] items-center gap-3 rounded-lux px-4 py-1.5 text-left text-sm hover:bg-linen",
                 selected === b.key && "bg-linen ring-1 ring-oak"
               )}
             >
               <span className="text-walnut">{b.label}</span>
-              <span className="h-5 rounded bg-linen">
-                <span className={cn("block h-5 rounded", b.color)} style={{ width: `${(value / max) * 100}%` }} />
+              <span className="h-5 rounded-lux bg-linen">
+                <span className={cn("block h-5 rounded-lux", b.color)} style={{ width: `${(value / max) * 100}%` }} />
               </span>
               <span className="num font-medium">
                 {money(value)} <span className="text-xs text-oak">{share}%</span>

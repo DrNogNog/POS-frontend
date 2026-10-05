@@ -4,16 +4,17 @@
 //
 // The counter screen faces customers, so price levels (AA, A, B, C, D), their
 // markups, our cost and our margins are HIDDEN by default. Staff click
-// "Show price levels" in the top bar when they need them, and hide them again
+// "Price levels" in the top bar when they need them, and hide them again
 // when a customer walks up. The choice is remembered on this computer only.
 // -----------------------------------------------------------------------------
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 
 const KEY = "pos.showPriceLevels";
 
-const PriceLevelsContext = createContext<{ show: boolean; toggle: () => void }>({
+const PriceLevelsContext = createContext<{ show: boolean; toggle: () => void; hide: () => void }>({
   show: false,
   toggle: () => {},
+  hide: () => {},
 });
 
 export const usePriceLevels = () => useContext(PriceLevelsContext);
@@ -37,7 +38,16 @@ export function PriceLevelsProvider({ children }: { children: ReactNode }) {
       return !s;
     });
   }, []);
-  return <PriceLevelsContext.Provider value={{ show, toggle }}>{children}</PriceLevelsContext.Provider>;
+  /** Used by the screensaver: price levels are always hidden when the screen locks. */
+  const hide = useCallback(() => {
+    setShow(false);
+    try {
+      window.localStorage.setItem(KEY, "0");
+    } catch {
+      /* ignore */
+    }
+  }, []);
+  return <PriceLevelsContext.Provider value={{ show, toggle, hide }}>{children}</PriceLevelsContext.Provider>;
 }
 
 /** Renders its children only while price levels are shown. */

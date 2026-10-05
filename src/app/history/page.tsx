@@ -76,7 +76,7 @@ export default function HistoryPage() {
                           {open === e.id ? "hide details" : "details"}
                         </button>
                       )}
-                      {open === e.id && <pre className="mt-2 overflow-x-auto rounded bg-linen p-2 text-xs">{JSON.stringify(e.details, null, 2)}</pre>}
+                      {open === e.id && <pre className="mt-2 overflow-x-auto rounded-[2rem] bg-linen p-5 text-xs">{JSON.stringify(e.details, null, 2)}</pre>}
                     </Td>
                     <Td className="num">{e.amount != null ? money(e.amount) : ""}</Td>
                     <Td>{e.userName}</Td>

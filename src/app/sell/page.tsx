@@ -320,7 +320,7 @@ export default function SellPage() {
                       <Td><Input className="num h-9" type="number" min={0} step="0.01" value={l.unitPrice} onChange={(e) => update(l.key, { unitPrice: e.target.value, manualPrice: true })} /></Td>
                       <Td className="num pt-4 font-medium">{money(n(l.qty) * n(l.unitPrice))}</Td>
                       <Td>
-                        <button aria-label="Remove line" className="rounded p-2 text-oak hover:bg-linen hover:text-late" onClick={() => setLines((ls) => ls.filter((x) => x.key !== l.key))}>
+                        <button aria-label="Remove line" className="rounded-full p-2 text-oak hover:bg-linen hover:text-late" onClick={() => setLines((ls) => ls.filter((x) => x.key !== l.key))}>
                           <Trash2 size={16} />
                         </button>
                       </Td>
@@ -343,7 +343,7 @@ export default function SellPage() {
         <div className="space-y-6">
           <Panel title="Pricing">
             <div className="space-y-4">
-              <Private fallback={<p className="text-sm text-oak">Price level is hidden. Use &ldquo;Show price levels&rdquo; at the top to change it.</p>}>
+              <Private fallback={<p className="text-sm text-oak">Price level is hidden. Click &ldquo;Price levels&rdquo; at the top to see or change it.</p>}>
                 <Field label="Price level">
                   <Select value={tier} onChange={(e) => changeTier(e.target.value)}>
                     {settings?.priceTiers.map((t) => (
@@ -420,7 +420,7 @@ export default function SellPage() {
                   </div>
                 )}
                 {short.length > 0 && (
-                  <div className="rounded-md bg-late/5 p-3 text-sm text-late">
+                  <div className="rounded-lux bg-late/5 px-6 py-4 text-sm text-late">
                     Not enough stock for {short.map((l) => l.itemCode).join(", ")}.
                     <div className="mt-2"><Checkbox label="Special order — sell anyway" checked={allowBackorder} onChange={setAllowBackorder} /></div>
                   </div>

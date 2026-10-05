@@ -52,7 +52,7 @@ export default function CostingPage() {
         <>
           <div className="grid gap-4 lg:grid-cols-3">
             {data.totals.map((t) => (
-              <div key={t.method} className={`rounded-lg border bg-white p-5 ${t.method === data.bookMethod ? "border-walnut ring-1 ring-walnut" : "border-hairline"}`}>
+              <div key={t.method} className={`rounded-lux border bg-white px-10 py-7 ${t.method === data.bookMethod ? "border-walnut ring-1 ring-walnut" : "border-hairline"}`}>
                 <div className="flex items-center justify-between">
                   <h2 className="font-semibold text-walnut">{METHOD_NAME[t.method]}</h2>
                   {t.method === data.bookMethod && <Badge tone="info">Used in your books</Badge>}

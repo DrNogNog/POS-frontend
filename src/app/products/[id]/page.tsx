@@ -114,7 +114,7 @@ export default function ProductPage() {
           <div className="flex flex-wrap gap-3">
             {p.images.map((img) => (
               <a key={img} href={imageUrl(img)} target="_blank" rel="noreferrer">
-                <Image src={imageUrl(img)} alt={p.name} width={160} height={160} unoptimized className="h-40 w-40 rounded-md border border-hairline object-cover" />
+                <Image src={imageUrl(img)} alt={p.name} width={160} height={160} unoptimized className="h-40 w-40 rounded-[2.5rem] border border-hairline object-cover" />
               </a>
             ))}
           </div>

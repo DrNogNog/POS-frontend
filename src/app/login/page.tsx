@@ -31,9 +31,9 @@ export default function LoginPage() {
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-walnut p-4">
-      <form onSubmit={login} className="w-full max-w-sm overflow-hidden rounded-xl bg-white shadow-2xl">
+      <form onSubmit={login} className="w-full max-w-md overflow-hidden rounded-lux bg-white shadow-2xl">
         <Image src="/Champion.png" alt="Champion Point of Sale" width={448} height={381} className="h-auto w-full" priority />
-        <div className="space-y-4 p-6">
+        <div className="space-y-4 px-10 pb-12 pt-6">
           <Field label="Store">
             <Select value={store} onChange={(e) => setStore(e.target.value)}>
               {(stores.length ? stores : [{ id: "A", name: "Store A" }]).map((s) => (

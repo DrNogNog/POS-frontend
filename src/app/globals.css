@@ -1,23 +1,30 @@
 @import "tailwindcss";
 
 /*
-  Brown & white theme.
-  Walnut sidebar, white work surfaces on a soft linen page.
-  Status colors are muted so long days at the counter are easy on the eyes.
+  Brown & white, refined.
+  Espresso navigation, white work surfaces on warm ivory, brass for the
+  small details. Every corner uses the same 5rem radius ("rounded-lux").
+  Text is Atkinson Hyperlegible Next — designed for maximum legibility over
+  long days — with Cormorant Garamond for titles and key figures.
 */
 @theme {
-  --color-walnut: #4a3426;      /* sidebar, primary buttons, headings */
-  --color-walnut-deep: #36261b; /* sidebar active / hover */
-  --color-oak: #8b6b4e;         /* secondary text, accents */
-  --color-maple: #c9a77f;       /* highlights on dark */
-  --color-linen: #f7f3ee;       /* page background, table stripes */
-  --color-hairline: #e6dccf;    /* borders */
-  --color-ink: #2b211b;         /* body text */
+  --color-walnut: #3b2a20;      /* espresso: navigation, primary buttons, titles */
+  --color-walnut-deep: #2a1e17; /* deepest brown: hover, screensaver */
+  --color-oak: #7a6250;         /* secondary text */
+  --color-maple: #c9a77f;       /* light accents on dark */
+  --color-brass: #a8834f;       /* fine details: active marks, focus, rules */
+  --color-ivory: #fffdf9;       /* text on dark */
+  --color-linen: #f7f2eb;       /* page background, table header, stripes */
+  --color-hairline: #e9dfd2;    /* borders */
+  --color-ink: #2d231c;         /* body text */
   --color-paid: #3f7d4e;
   --color-due: #a8701c;
   --color-late: #a23b2a;
 
-  --font-sans: var(--font-public-sans), ui-sans-serif, system-ui, sans-serif;
+  --radius-lux: 5rem;
+
+  --font-sans: var(--font-body), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-title), "Cormorant Garamond", Georgia, serif;
 }
 
 html,
@@ -28,22 +35,37 @@ body {
 
 body {
   font-family: var(--font-sans);
-  font-size: 15px;
+  font-size: 16px;
+  line-height: 1.6;
+  letter-spacing: 0.005em;
   -webkit-font-smoothing: antialiased;
 }
 
-/* Money and quantities line up in columns (utilities like text-left still win) */
 @layer components {
+  /* Money and quantities line up in columns (utilities like text-left still win) */
   .num {
-    font-variant-numeric: tabular-nums;
+    font-variant-numeric: tabular-nums lining-nums;
     text-align: right;
     white-space: nowrap;
   }
 }
 
 :focus-visible {
-  outline: 2px solid var(--color-oak);
-  outline-offset: 2px;
+  outline: 2px solid var(--color-brass);
+  outline-offset: 3px;
+}
+
+/* Screensaver: the clock drifts slowly so nothing burns into the screen */
+@keyframes pos-drift {
+  0%   { transform: translate(-6vw, -4vh); }
+  25%  { transform: translate(5vw, -6vh); }
+  50%  { transform: translate(6vw, 5vh); }
+  75%  { transform: translate(-5vw, 6vh); }
+  100% { transform: translate(-6vw, -4vh); }
+}
+@keyframes pos-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 @media (prefers-reduced-motion: reduce) {

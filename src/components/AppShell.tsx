@@ -32,11 +32,14 @@ import {
   Archive,
   Eye,
   EyeOff,
+  PanelLeftClose,
+  PanelLeftOpen,
   type LucideIcon,
 } from "lucide-react";
 import { useSession } from "@/lib/session";
 import { usePriceLevels } from "@/lib/privacy";
 import { cn } from "@/lib/utils";
+import Screensaver from "./Screensaver";
 import type { Role } from "@/lib/types";
 
 interface NavItem {
@@ -113,7 +116,7 @@ function StoreSwitcher() {
             setError(err instanceof Error ? err.message : String(err));
           }
         }}
-        className="h-9 rounded-md border border-hairline bg-white px-3 font-semibold text-walnut"
+        className="h-10 rounded-lux border border-hairline bg-white px-5 pr-10 font-semibold text-walnut"
       >
         {stores.map((s) => (
           <option key={s.id} value={s.id}>
@@ -126,11 +129,14 @@ function StoreSwitcher() {
   );
 }
 
+const NAV_KEY = "pos.navHidden";
+
 export default function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { user, loading, logout, can } = useSession();
-  const [menuOpen, setMenuOpen] = useState(false);
+  const { user, store, settings, loading, logout, can } = useSession();
+  const [menuOpen, setMenuOpen] = useState(false); // phone / tablet slide-out
+  const [navHidden, setNavHidden] = useState(false); // desktop: hide the menu entirely
   const levels = usePriceLevels();
   const isLogin = pathname.startsWith("/login");
 
@@ -139,6 +145,24 @@ export default function AppShell({ children }: { children: ReactNode }) {
   }, [loading, user, isLogin, router]);
 
   useEffect(() => setMenuOpen(false), [pathname]);
+
+  useEffect(() => {
+    try {
+      setNavHidden(window.localStorage.getItem(NAV_KEY) === "1");
+    } catch {
+      /* ignore */
+    }
+  }, []);
+  const toggleNav = () => {
+    setNavHidden((h) => {
+      try {
+        window.localStorage.setItem(NAV_KEY, h ? "0" : "1");
+      } catch {
+        /* ignore */
+      }
+      return !h;
+    });
+  };
 
   if (isLogin) return <>{children}</>;
   if (loading || !user) {
@@ -150,30 +174,33 @@ export default function AppShell({ children }: { children: ReactNode }) {
   return (
     <div className="flex min-h-screen">
       <aside
+        aria-label="Navigation"
         className={cn(
-          "fixed inset-y-0 left-0 z-40 w-64 overflow-y-auto bg-walnut text-white transition-transform lg:static lg:translate-x-0",
-          menuOpen ? "translate-x-0" : "-translate-x-full"
+          "fixed inset-y-3 left-3 z-40 w-72 overflow-y-auto rounded-lux bg-walnut text-ivory shadow-2xl transition-transform",
+          "lg:sticky lg:top-3 lg:h-[calc(100vh-1.5rem)] lg:shrink-0 lg:translate-x-0",
+          menuOpen ? "translate-x-0" : "-translate-x-[110%]",
+          navHidden && "lg:hidden"
         )}
       >
-        <div className="p-4">
-          <Link href="/" className="block overflow-hidden rounded-lg bg-white/95">
+        <div className="px-6 pb-2 pt-8">
+          <Link href="/" className="block overflow-hidden rounded-[3rem] bg-white/95 p-1">
             <Image src="/Champion.png" alt="Champion Point of Sale" width={448} height={381} className="h-auto w-full" priority />
           </Link>
         </div>
-        <nav className="px-3 pb-6" aria-label="Main menu">
+        <nav className="px-5 pb-10" aria-label="Main menu">
           {NAV.map((g) => {
             const items = g.items.filter((i) => !i.roles || can(...i.roles));
             if (!items.length) return null;
             return (
-              <div key={g.group || "home"} className="mb-3">
-                {g.group && <div className="px-3 pb-1 pt-2 text-xs font-medium text-maple">{g.group}</div>}
+              <div key={g.group || "home"} className="mb-2">
+                {g.group && <div className="px-5 pb-1 pt-4 font-display text-lg italic text-maple">{g.group}</div>}
                 {items.map((item) => (
                   <Link
                     key={item.href}
                     href={item.href}
                     className={cn(
-                      "flex items-center gap-3 rounded-md px-3 py-2 text-[15px] text-white/85 hover:bg-walnut-deep hover:text-white",
-                      isActive(item.href) && "bg-walnut-deep font-semibold text-white shadow-[inset_3px_0_0_var(--color-maple)]"
+                      "flex items-center gap-3 rounded-lux px-5 py-2.5 text-[15px] text-ivory/80 hover:bg-walnut-deep hover:text-ivory",
+                      isActive(item.href) && "bg-ivory font-semibold text-walnut hover:bg-ivory hover:text-walnut"
                     )}
                   >
                     <item.icon size={18} aria-hidden />
@@ -188,36 +215,46 @@ export default function AppShell({ children }: { children: ReactNode }) {
       {menuOpen && <div className="fixed inset-0 z-30 bg-black/30 lg:hidden" onClick={() => setMenuOpen(false)} />}
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-20 flex h-14 items-center justify-between gap-3 border-b border-hairline bg-white px-4 lg:px-8">
-          <div className="flex items-center gap-3">
-            <button className="rounded p-2 text-walnut hover:bg-linen lg:hidden" aria-label="Open menu" onClick={() => setMenuOpen(true)}>
+        <header className="sticky top-3 z-20 mx-3 mt-3 flex h-16 items-center justify-between gap-3 rounded-lux border border-hairline bg-white/90 px-4 shadow-sm backdrop-blur lg:mx-6">
+          <div className="flex items-center gap-2">
+            <button className="rounded-full p-2.5 text-walnut hover:bg-linen lg:hidden" aria-label="Open menu" onClick={() => setMenuOpen(true)}>
               <Menu size={20} />
+            </button>
+            <button
+              className="hidden items-center gap-2 rounded-lux px-4 py-2 text-sm font-semibold text-walnut hover:bg-linen lg:inline-flex"
+              onClick={toggleNav}
+              aria-pressed={navHidden}
+              title={navHidden ? "Show the menu" : "Hide the menu for more room"}
+            >
+              {navHidden ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
+              {navHidden ? "Show menu" : "Hide menu"}
             </button>
             <StoreSwitcher />
           </div>
-          <div className="flex items-center gap-3 text-sm">
+          <div className="flex items-center gap-2 text-sm">
             <button
               onClick={levels.toggle}
               aria-pressed={levels.show}
-              title="Price levels, costs and margins — hide them when a customer can see the screen"
+              title={levels.show ? "Price levels are showing — click to hide them" : "Price levels are hidden — click to show them"}
               className={cn(
-                "inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 font-medium",
-                levels.show ? "border-walnut bg-walnut text-white" : "border-hairline text-walnut hover:bg-linen"
+                "inline-flex items-center gap-1.5 rounded-lux border px-4 py-2 font-semibold",
+                levels.show ? "border-walnut bg-walnut text-ivory" : "border-hairline text-walnut hover:bg-linen"
               )}
             >
-              {levels.show ? <EyeOff size={16} /> : <Eye size={16} />}
-              {levels.show ? "Hide price levels" : "Show price levels"}
+              {levels.show ? <Eye size={16} /> : <EyeOff size={16} />}
+              Price levels
             </button>
-            <span className="hidden text-oak sm:inline">
+            <span className="hidden px-2 text-oak xl:inline">
               {user.name} <span className="text-oak/70">({user.role.toLowerCase()})</span>
             </span>
-            <button onClick={logout} className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-walnut hover:bg-linen">
-              <LogOut size={16} /> Log out
+            <button onClick={logout} className="inline-flex items-center gap-1.5 rounded-lux px-4 py-2 font-semibold text-walnut hover:bg-linen">
+              <LogOut size={16} /> <span className="hidden sm:inline">Log out</span>
             </button>
           </div>
         </header>
-        <main className="flex-1 px-4 py-6 lg:px-8">{children}</main>
+        <main className="flex-1 px-4 py-8 lg:px-10">{children}</main>
       </div>
+      <Screensaver storeName={settings?.settings.name || store?.name || ""} />
     </div>
   );
 }

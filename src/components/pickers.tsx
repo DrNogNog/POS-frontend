@@ -77,7 +77,7 @@ export function ProductSearch({
         aria-label="Search items"
       />
       {open && results.length > 0 && (
-        <ul className="absolute z-30 mt-1 max-h-80 w-full overflow-auto rounded-md border border-hairline bg-white shadow-lg">
+        <ul className="absolute z-30 mt-1 max-h-80 w-full overflow-auto rounded-[2rem] border py-2 border-hairline bg-white shadow-lg">
           {results.map((p, i) => (
             <li key={p.id}>
               <button
@@ -139,7 +139,7 @@ export function CustomerSearch({
         aria-label="Search customers"
       />
       {open && q.trim() && (
-        <ul className="absolute z-30 mt-1 max-h-80 w-full overflow-auto rounded-md border border-hairline bg-white shadow-lg">
+        <ul className="absolute z-30 mt-1 max-h-80 w-full overflow-auto rounded-[2rem] border py-2 border-hairline bg-white shadow-lg">
           {results.map((c) => (
             <li key={c.id}>
               <button
