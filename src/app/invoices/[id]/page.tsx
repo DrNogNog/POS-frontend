@@ -158,7 +158,7 @@ export default function InvoicePage() {
               <Row label="Balance due" value={money(inv.balance)} strong />
             </dl>
             {inv.earlyDiscountAvailableNow && (
-              <p className="mt-3 rounded-lux bg-paid/10 px-6 py-3 text-sm text-paid">
+              <p className="mt-3 rounded-lux bg-paid/10 px-4 py-3 text-sm text-paid">
                 Pays by {date(inv.earlyDiscountDeadline)} → takes {n(inv.earlyPayDiscountPct)}% off ({money(inv.earlyDiscountAmount)}).
               </p>
             )}

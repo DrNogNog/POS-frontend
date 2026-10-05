@@ -40,7 +40,7 @@ export const Button = forwardRef<
       disabled={disabled || busy}
       className={cn(
         "inline-flex items-center justify-center gap-2 rounded-lux font-semibold tracking-wide transition-colors disabled:cursor-not-allowed disabled:opacity-50",
-        size === "sm" ? "h-9 px-4 text-sm" : "h-11 px-6",
+        size === "sm" ? "h-9 px-3.5 text-sm" : "h-11 px-5",
         buttonStyles[variant],
         className
       )}
@@ -53,7 +53,7 @@ export const Button = forwardRef<
 
 // ---- Form fields ------------------------------------------------------------------
 const fieldBase =
-  "w-full rounded-lux border border-hairline bg-white px-5 text-ink placeholder:text-oak/60 focus:border-brass focus:outline-none focus:ring-2 focus:ring-brass/25 disabled:bg-linen";
+  "w-full rounded-lux border border-hairline bg-white px-3.5 text-ink placeholder:text-oak/60 focus:border-brass focus:outline-none focus:ring-2 focus:ring-brass/25 disabled:bg-linen";
 
 export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputElement>>(function Input(
   { className, ...rest },
@@ -71,7 +71,7 @@ export function Select({ className, children, ...rest }: SelectHTMLAttributes<HT
 }
 
 export function Textarea({ className, ...rest }: TextareaHTMLAttributes<HTMLTextAreaElement>) {
-  return <textarea className={cn(fieldBase, "min-h-24 rounded-[2.5rem] px-6 py-4", className)} {...rest} />;
+  return <textarea className={cn(fieldBase, "min-h-24 py-2.5", className)} {...rest} />;
 }
 
 export function Field({
@@ -87,9 +87,9 @@ export function Field({
 }) {
   return (
     <label className={cn("block", className)}>
-      <span className="mb-1.5 block pl-5 text-sm font-semibold text-walnut">{label}</span>
+      <span className="mb-1.5 block text-sm font-semibold text-walnut">{label}</span>
       {children}
-      {hint && <span className="mt-1 block pl-5 text-xs text-oak">{hint}</span>}
+      {hint && <span className="mt-1 block text-xs text-oak">{hint}</span>}
     </label>
   );
 }
@@ -153,12 +153,12 @@ export function Panel({
   return (
     <section className={cn("rounded-lux border border-hairline bg-white shadow-[0_1px_2px_rgba(59,42,32,0.04),0_12px_32px_-18px_rgba(59,42,32,0.18)]", className)}>
       {(title || actions) && (
-        <div className="flex items-center justify-between gap-3 px-10 pb-3 pt-7">
+        <div className="flex items-center justify-between gap-3 border-b border-hairline px-6 py-4">
           <h2 className="font-display text-2xl font-semibold text-walnut">{title}</h2>
           {actions}
         </div>
       )}
-      <div className={padded ? "px-10 pb-9 pt-4" : "px-8 pb-8"}>{children}</div>
+      <div className={padded ? "p-6" : ""}>{children}</div>
     </section>
   );
 }
@@ -177,7 +177,7 @@ export function Stat({
 }) {
   const color = { ink: "text-walnut", paid: "text-paid", due: "text-due", late: "text-late" }[tone];
   return (
-    <div className="rounded-lux border border-hairline bg-white px-10 py-6 shadow-[0_12px_32px_-20px_rgba(59,42,32,0.2)]">
+    <div className="rounded-lux border border-hairline bg-white px-6 py-5 shadow-[0_12px_32px_-20px_rgba(59,42,32,0.2)]">
       <div className="text-sm text-oak">{label}</div>
       <div className={cn("num mt-1 text-left font-display text-4xl font-semibold", color)}>{value}</div>
       {note && <div className="mt-1 text-xs text-oak">{note}</div>}
@@ -206,7 +206,7 @@ export function Empty({ children }: { children: ReactNode }) {
 
 export function ErrorNote({ children }: { children: ReactNode }) {
   if (!children) return null;
-  return <div className="rounded-lux border border-late/30 bg-late/5 px-8 py-4 text-sm text-late">{children}</div>;
+  return <div className="rounded-lux border border-late/30 bg-late/5 px-4 py-3 text-sm text-late">{children}</div>;
 }
 
 export function Loading() {
@@ -235,7 +235,7 @@ export function Th({
 }) {
   const active = sort && sortKey && sort.sort === sortKey;
   return (
-    <th className={cn("bg-linen px-4 py-3 text-left text-sm font-semibold text-walnut first:rounded-l-full first:pl-6 last:rounded-r-full last:pr-6", className)}>
+    <th className={cn("border-b border-hairline bg-linen px-4 py-3 text-left text-sm font-semibold text-walnut first:pl-6 last:pr-6", className)}>
       {sortKey && sort ? (
         <button
           type="button"
@@ -295,14 +295,14 @@ export function Modal({
         className={cn("w-full rounded-lux border border-hairline bg-white shadow-2xl", wide ? "max-w-5xl" : "max-w-xl")}
         onMouseDown={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between px-12 pb-2 pt-9">
+        <div className="flex items-center justify-between border-b border-hairline px-6 py-4">
           <h2 className="font-display text-3xl font-semibold text-walnut">{title}</h2>
           <button aria-label="Close" className="rounded-full p-2 text-oak hover:bg-linen" onClick={onClose}>
             <X size={18} />
           </button>
         </div>
-        <div className="px-12 py-5">{children}</div>
-        {footer && <div className="flex flex-wrap justify-end gap-2 px-12 pb-10 pt-3">{footer}</div>}
+        <div className="p-6">{children}</div>
+        {footer && <div className="flex flex-wrap justify-end gap-2 border-t border-hairline px-6 py-4">{footer}</div>}
       </div>
     </div>
   );
@@ -327,7 +327,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
           <div
             key={t.id}
             className={cn(
-              "rounded-lux px-6 py-3 text-sm shadow-lg",
+              "rounded-lux px-4 py-3 text-sm shadow-lg",
               t.tone === "ok" ? "bg-walnut text-white" : "bg-late text-white"
             )}
           >
@@ -381,7 +381,7 @@ export function Tabs<T extends string>({
           aria-selected={value === t.value}
           onClick={() => onChange(t.value)}
           className={cn(
-            "rounded-lux px-5 py-2 text-sm font-semibold",
+            "rounded-[0.375rem] px-4 py-2 text-sm font-semibold",
             value === t.value ? "bg-walnut text-ivory" : "text-oak hover:text-walnut"
           )}
         >

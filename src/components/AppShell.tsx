@@ -116,7 +116,7 @@ function StoreSwitcher() {
             setError(err instanceof Error ? err.message : String(err));
           }
         }}
-        className="h-10 rounded-lux border border-hairline bg-white px-5 pr-10 font-semibold text-walnut"
+        className="h-10 rounded-lux border border-hairline bg-white px-3.5 pr-9 font-semibold text-walnut"
       >
         {stores.map((s) => (
           <option key={s.id} value={s.id}>
@@ -176,30 +176,30 @@ export default function AppShell({ children }: { children: ReactNode }) {
       <aside
         aria-label="Navigation"
         className={cn(
-          "fixed inset-y-3 left-3 z-40 w-72 overflow-y-auto rounded-lux bg-walnut text-ivory shadow-2xl transition-transform",
+          "fixed inset-y-3 left-3 z-40 w-68 overflow-y-auto rounded-lux bg-walnut text-ivory shadow-2xl transition-transform",
           "lg:sticky lg:top-3 lg:h-[calc(100vh-1.5rem)] lg:shrink-0 lg:translate-x-0",
           menuOpen ? "translate-x-0" : "-translate-x-[110%]",
           navHidden && "lg:hidden"
         )}
       >
-        <div className="px-6 pb-2 pt-8">
-          <Link href="/" className="block overflow-hidden rounded-[3rem] bg-white/95 p-1">
+        <div className="px-4 pb-2 pt-4">
+          <Link href="/" className="block overflow-hidden rounded-lux bg-white/95">
             <Image src="/Champion.png" alt="Champion Point of Sale" width={448} height={381} className="h-auto w-full" priority />
           </Link>
         </div>
-        <nav className="px-5 pb-10" aria-label="Main menu">
+        <nav className="px-3 pb-6" aria-label="Main menu">
           {NAV.map((g) => {
             const items = g.items.filter((i) => !i.roles || can(...i.roles));
             if (!items.length) return null;
             return (
               <div key={g.group || "home"} className="mb-2">
-                {g.group && <div className="px-5 pb-1 pt-4 font-display text-lg italic text-maple">{g.group}</div>}
+                {g.group && <div className="px-3 pb-1 pt-4 font-display text-lg italic text-maple">{g.group}</div>}
                 {items.map((item) => (
                   <Link
                     key={item.href}
                     href={item.href}
                     className={cn(
-                      "flex items-center gap-3 rounded-lux px-5 py-2.5 text-[15px] text-ivory/80 hover:bg-walnut-deep hover:text-ivory",
+                      "flex items-center gap-3 rounded-lux px-3 py-2.5 text-[15px] text-ivory/80 hover:bg-walnut-deep hover:text-ivory",
                       isActive(item.href) && "bg-ivory font-semibold text-walnut hover:bg-ivory hover:text-walnut"
                     )}
                   >
@@ -215,7 +215,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
       {menuOpen && <div className="fixed inset-0 z-30 bg-black/30 lg:hidden" onClick={() => setMenuOpen(false)} />}
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-3 z-20 mx-3 mt-3 flex h-16 items-center justify-between gap-3 rounded-lux border border-hairline bg-white/90 px-4 shadow-sm backdrop-blur lg:mx-6">
+        <header className="sticky top-3 z-20 mx-3 mt-3 flex h-16 items-center justify-between gap-3 rounded-lux border border-hairline bg-white/90 px-3 shadow-sm backdrop-blur lg:mx-6">
           <div className="flex items-center gap-2">
             <button className="rounded-full p-2.5 text-walnut hover:bg-linen lg:hidden" aria-label="Open menu" onClick={() => setMenuOpen(true)}>
               <Menu size={20} />

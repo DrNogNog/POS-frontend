@@ -420,7 +420,7 @@ export default function SellPage() {
                   </div>
                 )}
                 {short.length > 0 && (
-                  <div className="rounded-lux bg-late/5 px-6 py-4 text-sm text-late">
+                  <div className="rounded-lux bg-late/5 px-4 py-3 text-sm text-late">
                     Not enough stock for {short.map((l) => l.itemCode).join(", ")}.
                     <div className="mt-2"><Checkbox label="Special order — sell anyway" checked={allowBackorder} onChange={setAllowBackorder} /></div>
                   </div>

@@ -3,7 +3,7 @@
 /*
   Brown & white, refined.
   Espresso navigation, white work surfaces on warm ivory, brass for the
-  small details. Every corner uses the same 5rem radius ("rounded-lux").
+  small details. Every corner uses the same 0.5rem radius ("rounded-lux").
   Text is Atkinson Hyperlegible Next — designed for maximum legibility over
   long days — with Cormorant Garamond for titles and key figures.
 */
@@ -21,7 +21,7 @@
   --color-due: #a8701c;
   --color-late: #a23b2a;
 
-  --radius-lux: 5rem;
+  --radius-lux: 0.5rem;
 
   --font-sans: var(--font-body), ui-sans-serif, system-ui, sans-serif;
   --font-display: var(--font-title), "Cormorant Garamond", Georgia, serif;

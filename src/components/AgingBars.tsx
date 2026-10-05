@@ -34,7 +34,7 @@ export default function AgingBars({
               type="button"
               onClick={() => onSelect?.(selected === b.key ? "" : b.key)}
               className={cn(
-                "grid w-full grid-cols-[9.5rem_1fr_7rem] items-center gap-3 rounded-lux px-4 py-1.5 text-left text-sm hover:bg-linen",
+                "grid w-full grid-cols-[9.5rem_1fr_7rem] items-center gap-3 rounded-lux px-3 py-1.5 text-left text-sm hover:bg-linen",
                 selected === b.key && "bg-linen ring-1 ring-oak"
               )}
             >

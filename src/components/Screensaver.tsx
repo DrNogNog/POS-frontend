@@ -65,7 +65,7 @@ export default function Screensaver({ storeName }: { storeName: string }) {
       style={{ animation: "pos-fade-in 1.2s ease-out" }}
     >
       <div className="flex flex-col items-center text-center" style={{ animation: "pos-drift 120s ease-in-out infinite" }}>
-        <div className="mb-10 overflow-hidden rounded-lux bg-white/95 p-2 shadow-2xl">
+        <div className="mb-10 overflow-hidden rounded-lux bg-white/95 shadow-2xl">
           <Image src="/Champion.png" alt="Champion Point of Sale" width={448} height={381} className="h-auto w-56" />
         </div>
         <div className="font-display text-8xl font-semibold leading-none tracking-tight">

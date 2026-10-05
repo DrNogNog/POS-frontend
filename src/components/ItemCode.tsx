@@ -54,7 +54,7 @@ export function ItemCode({ code, productId }: { code: string; productId?: number
         type="button"
         onClick={() => setOpen(true)}
         title="What does this code mean?"
-        className="whitespace-nowrap rounded-lux border border-hairline bg-linen px-2.5 py-0.5 font-semibold tracking-wide text-walnut hover:border-oak hover:bg-white"
+        className="whitespace-nowrap rounded-[0.375rem] border border-hairline bg-linen px-2 py-0.5 font-semibold tracking-wide text-walnut hover:border-oak hover:bg-white"
       >
         {code}
       </button>

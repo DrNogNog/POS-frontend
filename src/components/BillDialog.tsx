@@ -74,7 +74,7 @@ export default function BillDialog({ bill, onClose, onChanged }: { bill: BillDet
           <div className="flex justify-between text-base font-semibold text-walnut"><dt>Balance</dt><dd className="num">{money(bill.balance)}</dd></div>
         </dl>
         {bill.earlyDiscountAvailableNow && (
-          <p className="mt-3 rounded-lux bg-paid/10 px-6 py-3 text-sm text-paid">
+          <p className="mt-3 rounded-lux bg-paid/10 px-4 py-3 text-sm text-paid">
             Pay {money(bill.balance - bill.earlyDiscountAmount)} by {date(bill.earlyDiscountDeadline)} and save {money(bill.earlyDiscountAmount)}.
           </p>
         )}
