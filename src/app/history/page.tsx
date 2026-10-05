@@ -1,85 +1,99 @@
 "use client";
+// History: every change made in this store — sales, payments, stock, prices,
+// settings — newest first, with who did it.
+import { useState } from "react";
+import { useApi, useDebounced } from "@/lib/hooks";
+import { dateTime, money } from "@/lib/format";
+import { Button, Empty, ErrorNote, Field, Input, Loading, PageHeader, Panel, Select, Table, Td, Th } from "@/components/ui";
 
-import { useState, useEffect } from "react";
-import Sidebar from "@/components/sidebar";
+interface Entry { id: number; entityType: string; entityRef: string; action: string; summary: string; amount: string | null; userName: string; createdAt: string; details: unknown }
 
-export interface ProductChangeLog {
-  id: number;
-  productId: string;
-  action: "CREATE OR DUPLICATE" | "UPDATE" | "DELETE";
-  changes: Record<string, any>;
-  timestamp: string;
-}
+const TYPE_LABEL: Record<string, string> = {
+  Invoice: "Invoices",
+  Estimate: "Estimates",
+  Bill: "Supplier bills",
+  PurchaseOrder: "Purchase orders",
+  Product: "Items & stock",
+  Customer: "Customers",
+  Supplier: "Suppliers",
+  Payroll: "Payroll",
+  Employee: "Employees",
+  Settings: "Settings",
+  User: "Users",
+};
 
 export default function HistoryPage() {
-  const [logs, setLogs] = useState<ProductChangeLog[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const loadLogs = async () => {
-      try {
-        const res = await fetch("http://localhost:4000/api/product-change-logs");
-        if (!res.ok) throw new Error("Failed to fetch logs");
-        const data: ProductChangeLog[] = await res.json();
-        setLogs(data.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())); // newest first
-      } catch (err) {
-        console.error(err);
-        setLogs([]);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadLogs();
-  }, []);
-
-  const renderValue = (value: any) => {
-    if (Array.isArray(value)) return value.join(", ");
-    if (typeof value === "object" && value !== null) return JSON.stringify(value);
-    return value?.toString() ?? "";
-  };
+  const [q, setQ] = useState("");
+  const [type, setType] = useState("");
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
+  const [dir, setDir] = useState<"desc" | "asc">("desc");
+  const [page, setPage] = useState(1);
+  const debounced = useDebounced(q);
+  const params = new URLSearchParams({ page: String(page), limit: "100", dir });
+  if (debounced) params.set("q", debounced);
+  if (type) params.set("entityType", type);
+  if (from) params.set("from", from);
+  if (to) params.set("to", to);
+  const { data, error, loading } = useApi<{ items: Entry[]; total: number; types: string[] }>(`/history?${params}`);
+  const [open, setOpen] = useState<number | null>(null);
 
   return (
-    <div className="flex min-h-screen bg-zinc-100 dark:bg-black">
-      <Sidebar />
-      <main className="flex-1 p-10">
-        <h1 className="text-3xl font-bold mb-6">Product Change History</h1>
-
-        {loading ? (
-          <div className="text-center text-zinc-500 dark:text-zinc-400">Loading logs...</div>
-        ) : logs.length === 0 ? (
-          <div className="text-center text-zinc-500 dark:text-zinc-400">No product change logs found.</div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full bg-white dark:bg-zinc-900 rounded-xl shadow-lg border">
-              <thead className="bg-zinc-50 dark:bg-zinc-800 sticky top-0">
-                <tr>
-                  <th className="px-4 py-2 text-left">Timestamp</th>
-                  <th className="px-4 py-2 text-left">Action</th>
-                  <th className="px-4 py-2 text-left">Product ID</th>
-                  <th className="px-4 py-2 text-left">Changes</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-zinc-200 dark:divide-zinc-700">
-                {logs.map((log) => (
-                  <tr key={log.id} className="hover:bg-zinc-50 dark:hover:bg-zinc-800">
-                    <td className="px-4 py-2">{new Date(log.timestamp).toLocaleString()}</td>
-                    <td className="px-4 py-2">{log.action}</td>
-                    <td className="px-4 py-2">{log.productId}</td>
-                    <td className="px-4 py-2">
-                      {Object.entries(log.changes).map(([key, value]) => (
-                        <div key={key}>
-                          <strong>{key}:</strong> {renderValue(value)}
-                        </div>
-                      ))}
-                    </td>
+    <>
+      <PageHeader title="History" subtitle="Everything that has happened in this store, and who did it." />
+      <Panel padded={false}>
+        <div className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-5">
+          <Field label="Search"><Input placeholder="Invoice #, item code, name…" value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} /></Field>
+          <Field label="Area">
+            <Select value={type} onChange={(e) => { setType(e.target.value); setPage(1); }}>
+              <option value="">Everything</option>
+              {data?.types.map((t) => <option key={t} value={t}>{TYPE_LABEL[t] ?? t}</option>)}
+            </Select>
+          </Field>
+          <Field label="From"><Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></Field>
+          <Field label="To"><Input type="date" value={to} onChange={(e) => setTo(e.target.value)} /></Field>
+          <Field label="Order">
+            <Select value={dir} onChange={(e) => setDir(e.target.value as "asc" | "desc")}>
+              <option value="desc">Newest first</option>
+              <option value="asc">Oldest first</option>
+            </Select>
+          </Field>
+        </div>
+        <ErrorNote>{error}</ErrorNote>
+        {loading && !data ? <Loading /> : !data?.items.length ? <Empty>Nothing recorded yet.</Empty> : (
+          <>
+            <Table>
+              <thead><tr><Th>When</Th><Th>Area</Th><Th>What happened</Th><Th className="text-right">Amount</Th><Th>By</Th></tr></thead>
+              <tbody>
+                {data.items.map((e) => (
+                  <tr key={e.id} className="hover:bg-linen/60">
+                    <Td className="whitespace-nowrap">{dateTime(e.createdAt)}</Td>
+                    <Td>{TYPE_LABEL[e.entityType] ?? e.entityType}</Td>
+                    <Td>
+                      {e.summary}
+                      {e.details != null && (
+                        <button className="ml-2 text-xs text-oak underline" onClick={() => setOpen(open === e.id ? null : e.id)}>
+                          {open === e.id ? "hide details" : "details"}
+                        </button>
+                      )}
+                      {open === e.id && <pre className="mt-2 overflow-x-auto rounded bg-linen p-2 text-xs">{JSON.stringify(e.details, null, 2)}</pre>}
+                    </Td>
+                    <Td className="num">{e.amount != null ? money(e.amount) : ""}</Td>
+                    <Td>{e.userName}</Td>
                   </tr>
                 ))}
               </tbody>
-            </table>
-          </div>
+            </Table>
+            <div className="flex items-center justify-between p-4 text-sm text-oak">
+              <span>{data.total.toLocaleString()} entries</span>
+              <div className="flex gap-2">
+                <Button size="sm" variant="secondary" disabled={page === 1} onClick={() => setPage(page - 1)}>Previous</Button>
+                <Button size="sm" variant="secondary" disabled={page * 100 >= data.total} onClick={() => setPage(page + 1)}>Next</Button>
+              </div>
+            </div>
+          </>
         )}
-      </main>
-    </div>
+      </Panel>
+    </>
   );
 }

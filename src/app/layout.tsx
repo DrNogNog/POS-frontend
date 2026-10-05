@@ -1,25 +1,20 @@
-"use client";
-import { Geist, Geist_Mono } from "next/font/google";
+import type { Metadata } from "next";
+import { Public_Sans } from "next/font/google";
 import "./globals.css";
-import { AlertsProvider } from "@/lib/AlertsContext"; // adjust path
+import Providers from "./providers";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
+const publicSans = Public_Sans({ subsets: ["latin"], variable: "--font-public-sans", display: "swap" });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
+export const metadata: Metadata = {
+  title: "Champion POS",
+  description: "Point of sale, receivables, payables and inventory",
+};
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
-      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
-        <AlertsProvider>
-          {children}
-        </AlertsProvider>
+    <html lang="en" className={publicSans.variable}>
+      <body>
+        <Providers>{children}</Providers>
       </body>
     </html>
   );

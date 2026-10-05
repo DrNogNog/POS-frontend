@@ -1,429 +1,183 @@
 "use client";
-
-import { useState, useEffect, useRef, useMemo } from "react";
-import Sidebar from "@/components/sidebar";
+// Items & stock: every product with price in, price out and quantity on hand.
+import Link from "next/link";
+import { useState } from "react";
 import { api } from "@/lib/api";
-import ColumnDropdown from "@/components/ColumnDropdown";
-import ProductModal from "@/components/ProductModal";
-import ProductTableRow, { Product } from "@/components/ProductTableRow";
-import { useAlerts } from "@/lib/AlertsContext";
+import { parseCsv } from "@/lib/csv";
+import { useApi, useDebounced, useSort } from "@/lib/hooks";
+import { useSession } from "@/lib/session";
+import { money, n, qty } from "@/lib/format";
+import type { Product } from "@/lib/types";
+import { Button, Checkbox, Empty, ErrorNote, Field, Input, Loading, Modal, PageHeader, Panel, Select, Table, Td, Th, useAction } from "@/components/ui";
+import { ItemCode } from "@/components/ItemCode";
+import { ProductForm } from "@/components/forms";
 
-interface Order {
-  id: number;
-  name: string;
-  description?: string | null;
-  vendors?: string[] | null;
-  count: number;
-  createdAt: string;
-  invoiceNo?: string | null;
-}
-
-// OrderMore Modal Component
-function OrderMoreModal({
-  isOpen,
-  close,
-  product,
-  onSubmit,
-}: {
-  isOpen: boolean;
-  close: () => void;
-  product: Product | null;
-  onSubmit: (product: Product, count: number) => void;
-}) {
-  const [count, setCount] = useState<number>(1);
-
-  if (!isOpen || !product) return null;
-
-  const totalCost = (Number(product.inputcost) || 0) * count;
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (count < 1) {
-      alert("Please enter at least 1 item.");
-      return;
-    }
-    onSubmit(product, count);
-  };
+export default function ProductsPage() {
+  const { settings, can } = useSession();
+  const [q, setQ] = useState("");
+  const [categoryId, setCategoryId] = useState("");
+  const [lowStock, setLowStock] = useState(false);
+  const [inStock, setInStock] = useState(false);
+  const [tier, setTier] = useState("D");
+  const [page, setPage] = useState(1);
+  const debounced = useDebounced(q);
+  const sort = useSort<"itemCode" | "name" | "qtyOnHand" | "unitCost">("itemCode", "asc");
+  const params = new URLSearchParams({ page: String(page), limit: "50", sort: sort.sort, dir: sort.dir });
+  if (debounced) params.set("q", debounced);
+  if (categoryId) params.set("categoryId", categoryId);
+  if (lowStock) params.set("lowStock", "true");
+  if (inStock) params.set("inStock", "true");
+  const { data, error, loading, reload } = useApi<{ items: Product[]; total: number }>(`/products?${params}`);
+  const [adding, setAdding] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const markup = n(settings?.priceTiers.find((t) => t.code === tier)?.markupPct);
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50">
-      <div className="bg-white dark:bg-zinc-900 p-8 rounded-2xl shadow-2xl w-full max-w-md">
-        <h2 className="text-2xl font-bold mb-6 dark:text-white">
-          Order More: {product.name}
-        </h2>
-
-        {product.description && (
-          <p className="text-sm text-gray-600 dark:text-zinc-400 mb-3 italic">
-            {product.description}
-          </p>
-        )}
-
-        {product.vendors && product.vendors.length > 0 && (
-          <p className="mb-3 text-sm">
-            <span className="font-medium dark:text-zinc-300">Vendor:</span>{" "}
-            <span className="text-gray-700 dark:text-zinc-400">
-              {product.vendors.join(", ")}
-            </span>
-          </p>
-        )}
-
-        <div className="bg-gray-50 dark:bg-zinc-800 p-4 rounded-lg mb-6">
-          <div className="flex justify-between items-center mb-2">
-            <span className="font-medium">Cost per item:</span>
-            <span className="text-lg">${Number(product.inputcost).toFixed(2)}</span>
-          </div>
-          <div className="flex justify-between items-center text-xl font-bold">
-            <span>Total cost:</span>
-            <span className="text-green-600">${totalCost.toFixed(2)}</span>
+    <>
+      <PageHeader
+        title="Items & stock"
+        subtitle="Cabinets, counters, hardware and everything else we sell. Click a code to see what it means."
+        actions={
+          can("MANAGER") && (
+            <>
+              <Button variant="secondary" onClick={() => setImporting(true)}>Import price list</Button>
+              <Button onClick={() => setAdding(true)}>New item</Button>
+            </>
+          )
+        }
+      />
+      <Panel padded={false}>
+        <div className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-[2fr_1fr_1fr_auto]">
+          <Field label="Search"><Input placeholder="Code, name or collection (e.g. W0930, Avalon)" value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} /></Field>
+          <Field label="Category">
+            <Select value={categoryId} onChange={(e) => { setCategoryId(e.target.value); setPage(1); }}>
+              <option value="">All categories</option>
+              {settings?.categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </Select>
+          </Field>
+          <Field label="Show price at level">
+            <Select value={tier} onChange={(e) => setTier(e.target.value)}>
+              {settings?.priceTiers.map((t) => <option key={t.code} value={t.code}>{t.code} (+{n(t.markupPct)}%)</option>)}
+            </Select>
+          </Field>
+          <div className="flex flex-col justify-end gap-1 pb-1">
+            <Checkbox label="Running low" checked={lowStock} onChange={(v) => { setLowStock(v); setPage(1); }} />
+            <Checkbox label="In stock only" checked={inStock} onChange={(v) => { setInStock(v); setPage(1); }} />
           </div>
         </div>
-
-        <form onSubmit={handleSubmit} className="space-y-5">
-          <div>
-            <label className="block text-sm font-medium mb-2 dark:text-white">
-              How many to order?
-            </label>
-            <input
-              type="number"
-              min="1"
-              value={count}
-              onChange={(e) => setCount(Math.max(1, Number(e.target.value) || 1))}
-              className="w-full px-4 py-3 text-lg rounded-lg border border-zinc-300 dark:border-zinc-700 dark:bg-zinc-800 dark:text-white"
-              autoFocus
-            />
-          </div>
-
-          <div className="flex justify-end gap-3 pt-4">
-            <button
-              type="button"
-              onClick={close}
-              className="px-6 py-3 rounded-lg bg-zinc-200 dark:bg-zinc-700 hover:bg-zinc-300 dark:hover:bg-zinc-600 text-zinc-800 dark:text-white font-medium transition"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              className="px-8 py-3 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-medium transition shadow-md"
-            >
-              Create Purchase Order
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+        <ErrorNote>{error}</ErrorNote>
+        {loading && !data ? (
+          <Loading />
+        ) : !data?.items.length ? (
+          <Empty>No items found.{can("MANAGER") && " Add one, or import the price list."}</Empty>
+        ) : (
+          <>
+            <Table>
+              <thead>
+                <tr>
+                  <Th sortKey="itemCode" sort={sort}>Code</Th>
+                  <Th sortKey="name" sort={sort}>Item</Th>
+                  <Th>Supplier</Th>
+                  <Th className="text-right">List</Th>
+                  <Th sortKey="unitCost" sort={sort} className="text-right">Price in</Th>
+                  <Th className="text-right">Price out ({tier})</Th>
+                  <Th sortKey="qtyOnHand" sort={sort} className="text-right">On hand</Th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.items.map((p) => {
+                  const cost = n(p.unitCost);
+                  const price = p.sellPriceOverride ? n(p.sellPriceOverride) : cost * (1 + markup / 100);
+                  const low = n(p.reorderPoint) > 0 && n(p.qtyOnHand) <= n(p.reorderPoint);
+                  return (
+                    <tr key={p.id} className="hover:bg-linen/60">
+                      <Td><ItemCode code={p.itemCode} productId={p.id} /></Td>
+                      <Td>
+                        <Link href={`/products/${p.id}`} className="font-medium text-walnut hover:underline">{p.name}</Link>
+                        <div className="text-xs text-oak">{[p.category?.name, p.collection].filter(Boolean).join(" · ")}</div>
+                      </Td>
+                      <Td>{p.supplier?.name ?? "—"}</Td>
+                      <Td className="num text-oak">{n(p.listPrice) ? money(p.listPrice) : "—"}</Td>
+                      <Td className="num">{money(cost)}{n(p.supplierDiscountPct) > 0 && <div className="text-xs text-oak">{n(p.supplierDiscountPct)}% off list</div>}</Td>
+                      <Td className="num font-medium">{money(price)}</Td>
+                      <Td className={`num font-medium ${low ? "text-late" : ""}`}>{qty(p.qtyOnHand)} <span className="text-xs text-oak">{p.unit}</span></Td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </Table>
+            <div className="flex items-center justify-between p-4 text-sm text-oak">
+              <span>{data.total.toLocaleString()} items</span>
+              <div className="flex gap-2">
+                <Button size="sm" variant="secondary" disabled={page === 1} onClick={() => setPage(page - 1)}>Previous</Button>
+                <Button size="sm" variant="secondary" disabled={page * 50 >= data.total} onClick={() => setPage(page + 1)}>Next</Button>
+              </div>
+            </div>
+          </>
+        )}
+      </Panel>
+      <ProductForm open={adding} onClose={() => setAdding(false)} onSaved={() => reload()} />
+      <ImportDialog open={importing} onClose={() => setImporting(false)} onDone={() => reload()} />
+    </>
   );
 }
 
-export default function ProductsPage() {
-  const { updateLowStockAlert } = useAlerts();
-  const [products, setProducts] = useState<Product[]>([]);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [activePage, setActivePage] = useState("Item Library");
-  const [openIds, setOpenIds] = useState<Set<string>>(new Set());
-  const [newName, setNewName] = useState("");
-  const [newInputCost, setNewInputCost] = useState("");
-  const [newDescription, setNewDescription] = useState("");
-  const [newVendors, setNewVendors] = useState<string[]>([]);
-  const [newStock, setNewStock] = useState("0");
-  const [images, setImages] = useState<File[]>([]);
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [orderModalProduct, setOrderModalProduct] = useState<Product | null>(null);
+function ImportDialog({ open, onClose, onDone }: { open: boolean; onClose: () => void; onDone: () => void }) {
+  const [rows, setRows] = useState<Record<string, string>[]>([]);
+  const [progress, setProgress] = useState("");
+  const { busy, run } = useAction();
 
-  const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  const allColumns = ["Item", "Description", "Cost", "Stock", "Vendors", "Actions"];
-  const [visibleColumns, setVisibleColumns] = useState<Set<string>>(new Set(allColumns));
-
-  const [currentPage, setCurrentPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const [loading, setLoading] = useState(false);
-  const pageSize = 100;
-
-  // Load products from backend
-  const loadProducts = async (page: number = 1) => {
-    if (loading) return;
-    setLoading(true);
-    try {
-      const res = await api(`/products?page=${page}&limit=${pageSize}`);
-      const { products: data, total } = res;
-
-      const normalized: Product[] = (data || []).map((p: any) => ({
-        ...p,
-        id: String(p.id),
-        inputcost: Number(p.inputcost || 0),
-        stock: p.stock ?? 0,
-        vendors: p.vendors ?? [],
-      }));
-
-      // Append and deduplicate
-      setProducts((prev) => {
-        const merged = [...prev, ...normalized];
-        return merged.filter((p, i, arr) => arr.findIndex((x) => x.id === p.id) === i);
-      });
-
-      setTotalPages(Math.ceil(total / pageSize));
-      setCurrentPage(page);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    if (activePage === "Item Library") loadProducts(1);
-  }, [activePage]);
-
-  // Infinite scroll
-  useEffect(() => {
-    const container = scrollContainerRef.current;
-    if (!container) return;
-
-    const handleScroll = () => {
-      if (
-        container.scrollTop + container.clientHeight >=
-        container.scrollHeight - 100
-      ) {
-        if (!loading && currentPage < totalPages) {
-          loadProducts(currentPage + 1);
-        }
+  async function importRows() {
+    let created = 0;
+    let updated = 0;
+    const ok = await run(async () => {
+      for (let i = 0; i < rows.length; i += 1000) {
+        setProgress(`Importing ${i + 1}–${Math.min(i + 1000, rows.length)} of ${rows.length}…`);
+        const chunk = rows.slice(i, i + 1000).map((r) => ({
+          ...r,
+          listPrice: r.listPrice || 0,
+          supplierDiscountPct: r.supplierDiscountPct || 0,
+          unitCost: r.unitCost === "" ? undefined : r.unitCost,
+          qtyOnHand: r.qtyOnHand === "" || r.qtyOnHand === undefined ? undefined : r.qtyOnHand,
+        }));
+        const res = await api<{ created: number; updated: number }>("/products/import", { body: { rows: chunk } });
+        created += res.created;
+        updated += res.updated;
       }
-    };
-
-    container.addEventListener("scroll", handleScroll);
-    return () => container.removeEventListener("scroll", handleScroll);
-  }, [currentPage, totalPages, loading]);
-
-  // Filtered products
-  const filteredProducts = useMemo(() => {
-    const query = searchQuery.toUpperCase().trim();
-    if (!query) return products;
-    return products.filter(
-      (p) =>
-        p.name.toUpperCase().includes(query) ||
-        (p.description?.toUpperCase().includes(query) ?? false) ||
-        p.vendors?.some((v) => v.toUpperCase().includes(query))
-    );
-  }, [searchQuery, products]);
-
-  const updateProductInState = (updated: Product) =>
-    setProducts((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
-
-  const deleteProduct = async (id: string) => {
-    try {
-      await fetch(`http://localhost:4000/api/products/${id}`, { method: "DELETE" });
-      setProducts((prev) => prev.filter((p) => p.id !== id));
-    } catch {}
-  };
-
-  const duplicateProduct = async (product: Product) => {
-    try {
-      const body = { ...product, name: product.name.toUpperCase() };
-      const res = await fetch("http://localhost:4000/api/products/duplicate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      const newProduct = await res.json();
-      newProduct.id = String(newProduct.id);
-      setProducts((prev) => [...prev, newProduct]);
-    } catch {}
-  };
-
-  const editProduct = async (product: Product) => {
-    try {
-      const form = new FormData();
-      form.append("name", product.name.toUpperCase());
-      form.append("inputcost", String(product.inputcost));
-      if (product.description) form.append("description", product.description);
-      if (product.stock !== undefined) form.append("stock", product.stock.toString());
-      if (product.vendors) form.append("vendors", product.vendors.join(","));
-      if (product.images) product.images.forEach((img) => form.append("images", img as any));
-
-      const res = await fetch(`http://localhost:4000/api/products/${product.id}`, {
-        method: "PUT",
-        body: form,
-      });
-
-      const saved = await res.json();
-      saved.id = String(saved.id);
-      updateProductInState(saved);
-    } catch {
-      alert("Failed to update product");
-    }
-  };
-
-  const orderMore = (p: Product) => setOrderModalProduct(p);
-  const closeOrderModal = () => setOrderModalProduct(null);
-
-  const handleOrderMoreSubmit = async (product: Product, count: number) => {
-    if (!product) return;
-    try {
-      await fetch(`http://localhost:4000/api/products/needToOrder/${product.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ needToOrder: count }),
-      });
-      setProducts((prev) =>
-        prev.map((p) => (p.id === product.id ? { ...p, needToOrder: count } : p))
-      );
-      closeOrderModal();
-    } catch {
-      alert("Failed to save");
-    }
-  };
-
-  const createProduct = async () => {
-    if (!newName.trim() || !newInputCost.trim()) {
-      alert("Name and Cost are required.");
-      return;
-    }
-
-    const formData = new FormData();
-    formData.append("name", newName.toUpperCase().trim());
-    formData.append("inputcost", newInputCost.trim());
-    formData.append("stock", newStock);
-    formData.append("needToOrder", "0");
-    if (newDescription.trim()) formData.append("description", newDescription.trim());
-    if (newVendors.length > 0) formData.append("vendors", newVendors.join(","));
-    images.forEach((img) => formData.append("images", img));
-
-    try {
-      const res = await fetch("http://localhost:4000/api/products", {
-        method: "POST",
-        body: formData,
-      });
-      const created = await res.json();
-      created.id = String(created.id);
-
-      setProducts((prev) => [...prev, created]);
-      setNewName("");
-      setNewInputCost("");
-      setNewDescription("");
-      setNewVendors([]);
-      setNewStock("0");
-      setImages([]);
-      setIsModalOpen(false);
-    } catch {
-      alert("Failed to save product");
-    }
-  };
+      return true;
+    });
+    setProgress(ok ? `Done: ${created} new items, ${updated} updated.` : "");
+    if (ok) onDone();
+  }
 
   return (
-    <div className="flex min-h-screen bg-zinc-100 dark:bg-black">
-      <Sidebar />
-      <main className="flex-1 p-10">
-        {activePage === "Item Library" && (
-          <div className="mx-auto max-w-6xl">
-            <h1 className="text-3xl font-bold mb-8">Item Library</h1>
-
-            <div className="max-w-md mx-auto bg-white dark:bg-zinc-900 p-6 rounded-2xl shadow-lg mb-6 flex flex-col items-center gap-4">
-              <h2 className="text-xl font-semibold dark:text-white text-center">
-                Your Item Library
-              </h2>
-              <button
-                className="bg-blue-600 text-white px-8 py-3 rounded hover:bg-blue-700"
-                onClick={() => setIsModalOpen(true)}
-              >
-                Create an Item
-              </button>
-            </div>
-
-            <div className="max-w-md mx-auto mb-4 space-y-2">
-              <input
-                type="text"
-                placeholder="Search by name, description, or vendor..."
-                className="w-full px-4 py-3 rounded-lg border border-zinc-300 dark:border-zinc-700 dark:bg-zinc-800 dark:text-white"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-            </div>
-
-            <ProductModal
-              isOpen={isModalOpen}
-              close={() => setIsModalOpen(false)}
-              createProduct={createProduct}
-              newName={newName}
-              setNewName={setNewName}
-              newInputCost={newInputCost}
-              setNewInputCost={setNewInputCost}
-              newDescription={newDescription}
-              setNewDescription={setNewDescription}
-              newVendors={newVendors}
-              setNewVendors={setNewVendors}
-              newStock={newStock}
-              setNewStock={setNewStock}
-              images={images}
-              setImages={setImages}
-              handleFiles={(f) => setImages([...images, ...Array.from(f || [])])}
-              handleDrop={(e) => {
-                e.preventDefault();
-                const files = e.dataTransfer.files;
-                setImages([...images, ...Array.from(files)]);
-              }}
-              handleDragOver={(e) => e.preventDefault()}
-            />
-
-            <div className="flex justify-end mb-4">
-              <ColumnDropdown
-                options={allColumns}
-                selected={visibleColumns}
-                setSelected={setVisibleColumns}
-              />
-            </div>
-
-            <div className="bg-white dark:bg-zinc-900 rounded-xl shadow-xl border">
-              <div
-                className="h-[calc(100vh-150px)] overflow-y-auto"
-                ref={scrollContainerRef}
-              >
-                <table className="w-full">
-                  <thead className="bg-zinc-50 dark:bg-zinc-800 border-b sticky top-0 z-10">
-                    <tr>
-                      {allColumns.map((col) =>
-                        visibleColumns.has(col) ? (
-                          <th
-                            key={col}
-                            className={`px-6 py-4 ${
-                              col === "Stock" || col === "Cost" ? "text-right" : "text-left"
-                            }`}
-                          >
-                            {col}
-                          </th>
-                        ) : null
-                      )}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredProducts.map((product) => (
-                      <ProductTableRow
-                        key={product.id}
-                        product={product}
-                        visibleColumns={visibleColumns}
-                        deleteProduct={deleteProduct}
-                        duplicateProduct={duplicateProduct}
-                        editProduct={editProduct}
-                        orderMore={() => orderMore(product)}
-                        setNonTaxable={(id) => console.log("setNonTaxable", id)}
-                        archiveProduct={(id) => console.log("archiveProduct", id)}
-                        updateLowStockAlert={updateLowStockAlert}
-                      />
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            <OrderMoreModal
-              isOpen={!!orderModalProduct}
-              close={closeOrderModal}
-              product={orderModalProduct}
-              onSubmit={handleOrderMoreSubmit}
-            />
-          </div>
-        )}
-      </main>
-    </div>
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="Import a price list"
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose}>Close</Button>
+          <Button onClick={importRows} busy={busy} disabled={!rows.length}>Import {rows.length.toLocaleString()} items</Button>
+        </>
+      }
+    >
+      <p className="mb-3 text-sm text-oak">
+        Choose a CSV file with the columns <b>itemCode, name, description, category, collection, supplier, listPrice, supplierDiscountPct</b>{" "}
+        (optional: unitCost, unit, qtyOnHand). The 2025 cabinet price list is ready at <b>POS-backend/data/pricelist-2025.csv</b>.
+        Existing codes get their prices updated; stock isn&apos;t changed.
+      </p>
+      <input
+        type="file"
+        accept=".csv,text/csv"
+        onChange={async (e) => {
+          const file = e.target.files?.[0];
+          setProgress("");
+          setRows(file ? parseCsv(await file.text()).filter((r) => r.itemCode && r.name) : []);
+        }}
+      />
+      {rows.length > 0 && <p className="mt-3 text-sm">{rows.length.toLocaleString()} items found. First: <b>{rows[0].itemCode}</b> {rows[0].name}</p>}
+      {progress && <p className="mt-3 text-sm text-walnut">{progress}</p>}
+    </Modal>
   );
 }

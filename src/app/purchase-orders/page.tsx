@@ -1,439 +1,400 @@
 "use client";
+// -----------------------------------------------------------------------------
+// Purchase orders: order from a supplier, then receive the goods together
+// with the supplier's invoice. Receiving adds the stock (with freight spread
+// into the cost) and puts the bill into Accounts Payable.
+// -----------------------------------------------------------------------------
+import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
+import { Trash2 } from "lucide-react";
+import { api, openPdf } from "@/lib/api";
+import { useApi, useQueryParam } from "@/lib/hooks";
+import { date, isoDay, money, n, qty } from "@/lib/format";
+import type { Product, Supplier } from "@/lib/types";
+import { Badge, Button, Empty, ErrorNote, Field, Input, Loading, Modal, PageHeader, Panel, Select, Table, Td, Textarea, Th, useAction } from "@/components/ui";
+import { ProductSearch } from "@/components/pickers";
+import { ItemCode } from "@/components/ItemCode";
 
-import { useState, useEffect } from "react";
-import Sidebar from "@/components/sidebar";
-import { Package, CheckCircle2, FileText, X } from "lucide-react";
-import { generateBillingPdf } from "@/lib/generateBillingPdf";
-
-interface Product {
-  id: string;
-  name: string;
-  description: string; // <-- added description
-  inputcost: number;
-  stock: number;
-  needToOrder: number;
-  vendors: string[];
+interface PoLine {
+  id: number;
+  productId: number;
+  product: { id: number; itemCode: string; name: string; unit: string };
+  qty: string;
+  listPrice: string;
+  discountPct: string;
+  unitCost: string;
+  lineTotal: string;
+  qtyReceived: string;
+}
+interface Po {
+  id: number;
+  poNo: string;
+  supplierId: number;
+  supplier: Supplier;
+  orderDate: string;
+  expectedDate: string | null;
+  status: "DRAFT" | "ORDERED" | "RECEIVED" | "CANCELLED";
+  subtotal: string;
+  notes: string;
+  lines?: PoLine[];
+  bills?: { id: number; billNo: string }[];
+  _count?: { lines: number };
 }
 
-export type BillingItem = {
-  item: string;
-  qty: number | "";
-  description: string;
-  rate: number | "";
+const STATUS: Record<Po["status"], { label: string; tone: "neutral" | "due" | "paid" | "late" }> = {
+  DRAFT: { label: "Draft", tone: "neutral" },
+  ORDERED: { label: "Ordered", tone: "due" },
+  RECEIVED: { label: "Received", tone: "paid" },
+  CANCELLED: { label: "Cancelled", tone: "late" },
 };
 
-export type BillingPayload = {
-  companyName?: string;
-  companyAddr1?: string;
-  phone?: string;
-  email?: string;
-  website?: string;
-  date?: string;
-  billTo?: string;
-  shipTo?: string;
-  items: BillingItem[];
-  subtotal: number;
-  total: number;
-  invoiceNo: string;
-  salesman?: string;
-  tax?: number;
-};
+interface Draft {
+  key: number;
+  productId: number;
+  itemCode: string;
+  name: string;
+  qty: string;
+  listPrice: string;
+  discountPct: string;
+}
+let seq = 1;
 
 export default function PurchaseOrdersPage() {
-  const [productsToOrder, setProductsToOrder] = useState<Product[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [status, setStatus] = useState("");
+  const { data, error, loading, reload } = useApi<Po[]>(`/purchase-orders${status ? `?status=${status}` : ""}`);
+  const { data: suppliers } = useApi<Supplier[]>("/suppliers");
+  const [creating, setCreating] = useState(false);
+  const [detail, setDetail] = useState<Po | null>(null);
+  const openParam = useQueryParam("open");
+  const supplierParam = useQueryParam("supplier");
+  const reorderParam = useQueryParam("reorder");
 
-  const [billingData, setBillingData] = useState<BillingPayload>({
-    companyName: "Your Company Name",
-    companyAddr1: "123 Business St, City, State 12345",
-    phone: "+1 (555) 123-4567",
-    email: "sales@yourcompany.com",
-    website: "www.yourcompany.com",
-    date: new Date().toISOString().split("T")[0],
-    invoiceNo: "",
-    salesman: "",
-    billTo: "",
-    shipTo: "",
-    items: [],
-    subtotal: 0,
-    total: 0,
-    tax: 0,
-  });
+  const showDetail = async (id: number) => setDetail(await api<Po>(`/purchase-orders/${id}`));
+  useEffect(() => {
+    if (openParam) void showDetail(Number(openParam));
+  }, [openParam]);
+  useEffect(() => {
+    if (supplierParam || reorderParam) setCreating(true);
+  }, [supplierParam, reorderParam]);
+
+  return (
+    <>
+      <PageHeader
+        title="Purchase orders"
+        subtitle="Order stock from suppliers. When it arrives, receive it with the supplier's invoice."
+        actions={<Button onClick={() => setCreating(true)}>New purchase order</Button>}
+      />
+      <Panel padded={false}>
+        <div className="p-4">
+          <Select className="max-w-xs" value={status} onChange={(e) => setStatus(e.target.value)}>
+            <option value="">All purchase orders</option>
+            <option value="DRAFT">Drafts</option>
+            <option value="ORDERED">Ordered — waiting for delivery</option>
+            <option value="RECEIVED">Received</option>
+            <option value="CANCELLED">Cancelled</option>
+          </Select>
+        </div>
+        <ErrorNote>{error}</ErrorNote>
+        {loading && !data ? (
+          <Loading />
+        ) : !data?.length ? (
+          <Empty>No purchase orders yet.</Empty>
+        ) : (
+          <Table>
+            <thead><tr><Th>PO</Th><Th>Date</Th><Th>Supplier</Th><Th className="text-right">Lines</Th><Th className="text-right">Amount</Th><Th>Status</Th><Th /></tr></thead>
+            <tbody>
+              {data.map((po) => (
+                <tr key={po.id} className="hover:bg-linen/60">
+                  <Td><button className="font-semibold text-walnut underline" onClick={() => showDetail(po.id)}>{po.poNo}</button></Td>
+                  <Td>{date(po.orderDate)}</Td>
+                  <Td><Link href={`/suppliers/${po.supplierId}`} className="hover:underline">{po.supplier.name}</Link></Td>
+                  <Td className="num">{po._count?.lines}</Td>
+                  <Td className="num font-medium">{money(po.subtotal)}</Td>
+                  <Td><Badge tone={STATUS[po.status].tone}>{STATUS[po.status].label}</Badge></Td>
+                  <Td className="text-right"><Button size="sm" variant="ghost" onClick={() => openPdf(`/purchase-orders/${po.id}/pdf`)}>PDF</Button></Td>
+                </tr>
+              ))}
+            </tbody>
+          </Table>
+        )}
+      </Panel>
+
+      <NewPoDialog
+        open={creating}
+        onClose={() => setCreating(false)}
+        suppliers={suppliers ?? []}
+        initialSupplierId={supplierParam}
+        loadReorder={Boolean(reorderParam)}
+        onSaved={async (po) => {
+          await reload();
+          await showDetail(po.id);
+        }}
+      />
+      <PoDetail po={detail} onClose={() => setDetail(null)} onChanged={async () => { await reload(); if (detail) await showDetail(detail.id); }} />
+    </>
+  );
+}
+
+function NewPoDialog({
+  open,
+  onClose,
+  suppliers,
+  initialSupplierId,
+  loadReorder,
+  onSaved,
+}: {
+  open: boolean;
+  onClose: () => void;
+  suppliers: Supplier[];
+  initialSupplierId: string;
+  loadReorder: boolean;
+  onSaved: (po: Po) => void;
+}) {
+  const [supplierId, setSupplierId] = useState("");
+  const [expected, setExpected] = useState("");
+  const [notes, setNotes] = useState("");
+  const [lines, setLines] = useState<Draft[]>([]);
+  const { busy, run } = useAction();
+  const supplier = suppliers.find((s) => String(s.id) === supplierId);
 
   useEffect(() => {
-    const fetchNeededProducts = async () => {
-      try {
-        const res = await fetch("http://localhost:4000/api/products/needToOrder");
-        const data = await res.json();
-        console.log(data);
+    if (!open) return;
+    setSupplierId(initialSupplierId || "");
+    setLines([]);
+    setNotes("");
+    setExpected("");
+  }, [open, initialSupplierId]);
 
-        const filtered = data
-          .filter((p: any) => p.needToOrder > 0)
-          .map((p: any) => ({
-            id: String(p.id),
-            name: p.name,
-            description: p.description || "", // <-- include description
-            inputcost: Number(p.inputcost),
-            stock: p.stock ?? 0,
-            needToOrder: p.needToOrder ?? 0,
-            vendors: p.vendors ?? [],
-          }));
+  const toDraft = (p: Product, q = 1): Draft => ({
+    key: seq++,
+    productId: p.id,
+    itemCode: p.itemCode,
+    name: p.name,
+    qty: String(q),
+    listPrice: n(p.listPrice) ? String(n(p.listPrice)) : String(n(p.unitCost)),
+    discountPct: String(n(p.supplierDiscountPct) || (n(p.listPrice) ? n(supplier?.tradeDiscountPct) : 0)),
+  });
 
-        setProductsToOrder(filtered);
-        setLoading(false);
-      } catch (err) {
-        console.error(err);
-        setLoading(false);
-      }
-    };
+  async function addReorderItems() {
+    const items = await api<(Product & { suggestedQty: number })[]>("/products/reorder");
+    const mine = items.filter((p) => !supplierId || String(p.supplierId) === supplierId);
+    setLines((ls) => [...ls, ...mine.filter((p) => !ls.some((l) => l.productId === p.id)).map((p) => toDraft(p, p.suggestedQty))]);
+  }
+  useEffect(() => {
+    if (open && loadReorder) void addReorderItems();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, loadReorder]);
 
-    fetchNeededProducts();
-  }, []);
+  const net = (l: Draft) => n(l.listPrice) * (1 - n(l.discountPct) / 100);
+  const total = useMemo(() => lines.reduce((s, l) => s + n(l.qty) * net(l), 0), [lines]);
+  const savings = useMemo(() => lines.reduce((s, l) => s + n(l.qty) * (n(l.listPrice) - net(l)), 0), [lines]);
+  const update = (key: number, patch: Partial<Draft>) => setLines((ls) => ls.map((l) => (l.key === key ? { ...l, ...patch } : l)));
 
-  const openBillingModal = (product: Product) => {
-    const qty = product.needToOrder;
-    const rate = product.inputcost;
-    const subtotal = qty * rate;
-
-    setSelectedProduct(product);
-    setBillingData({
-      companyName: "Your Company Name",
-      companyAddr1: "123 Business St, City, State 12345",
-      phone: "+1 (555) 123-4567",
-      email: "sales@yourcompany.com",
-      website: "www.yourcompany.com",
-      date: new Date().toISOString().split("T")[0],
-      invoiceNo: "",
-      salesman: "",
-      billTo: "",
-      shipTo: "",
-      items: [
-        {
-          item: product.name,
-          qty,
-          description: product.description || "", // <-- autofill description here
-          rate,
-        },
-      ],
-      subtotal,
-      total: subtotal,
-      tax: 0,
-    });
-    setIsModalOpen(true);
-  };
-
-  const blobToBase64 = (blob: Blob): Promise<string> =>
-    new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result as string);
-      reader.onerror = reject;
-      reader.readAsDataURL(blob);
-    });
-
-  const handleSubmitBilling = async () => {
-    if (!selectedProduct) return;
-    if (!billingData.invoiceNo.trim()) {
-      alert("Please enter an Invoice Number!");
-      return;
-    }
-
-    const itemsTotal = billingData.items.reduce(
-      (sum, item) => sum + Number(item.qty || 0) * Number(item.rate || 0),
-      0
-    );
-
-    const finalData: BillingPayload = {
-      ...billingData,
-      subtotal: itemsTotal,
-      total: itemsTotal + (billingData.tax || 0),
-      invoiceNo: billingData.invoiceNo.trim(),
-    };
-
-    try {
-      // 1. Generate PDF
-      const pdfBlob = await generateBillingPdf(finalData, true);
-      const pdfBase64 = await blobToBase64(pdfBlob);
-
-      // 2. Save PDF
-      const saveRes = await fetch("http://localhost:4000/api/billing/save-pdf", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          orderId: Number(selectedProduct.id),
-          invoiceNo: finalData.invoiceNo,
-          cost: finalData.total,
-          pdfBase64,
+  async function save() {
+    const po = await run(
+      () =>
+        api<Po>("/purchase-orders", {
+          body: {
+            supplierId: Number(supplierId),
+            expectedDate: expected || null,
+            notes,
+            lines: lines.map((l) => ({ productId: l.productId, qty: n(l.qty), listPrice: n(l.listPrice), discountPct: n(l.discountPct) })),
+          },
         }),
-      });
-
-      if (!saveRes.ok) {
-        const err = await saveRes.json();
-        throw new Error(err.error || "Failed to save PDF");
-      }
-
-      // 3) Increment stock for purchased items
-      await fetch("http://localhost:4000/api/products/increment-stock", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          items: billingData.items.map((i) => ({
-            item: i.item,
-            qty: Number(i.qty),
-          })),
-        }),
-      });
-
-      // 4. Reset needToOrder
-      await fetch(`http://localhost:4000/api/products/needToOrder/${selectedProduct.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ needToOrder: 0 }),
-      });
-
-      // 5. Remove from list
-      setProductsToOrder((prev) => prev.filter((p) => p.id !== selectedProduct.id));
-
-      alert(`Success!\nInvoice #${finalData.invoiceNo} saved.`);
-      setIsModalOpen(false);
-      setSelectedProduct(null);
-    } catch (error: any) {
-      console.error("Billing failed:", error);
-      alert("Error: " + (error.message || "Something went wrong"));
-    }
-  };
-
-  if (loading) {
-    return (
-      <div className="flex min-h-screen">
-        <Sidebar />
-        <main className="flex-1 p-8 flex items-center justify-center">
-          <div className="text-xl text-gray-600">Loading purchase needs...</div>
-        </main>
-      </div>
+      "Purchase order saved"
     );
+    if (po) {
+      onClose();
+      onSaved(po);
+    }
   }
 
   return (
-    <div className="flex min-h-screen bg-gray-50">
-      <Sidebar />
-      <main className="flex-1 p-8">
-        <div className="max-w-6xl mx-auto">
-          <div className="mb-8">
-            <h1 className="text-4xl font-bold text-gray-900 flex items-center gap-3">
-              <Package className="w-10 h-10 text-blue-600" />
-              Purchase Orders Needed
-            </h1>
-          </div>
+    <Modal
+      open={open}
+      onClose={onClose}
+      wide
+      title="New purchase order"
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose}>Cancel</Button>
+          <Button onClick={save} busy={busy} disabled={!supplierId || !lines.length}>Save purchase order</Button>
+        </>
+      }
+    >
+      <div className="grid gap-4 sm:grid-cols-3">
+        <Field label="Supplier">
+          <Select value={supplierId} onChange={(e) => setSupplierId(e.target.value)}>
+            <option value="">Choose…</option>
+            {suppliers.filter((s) => s.active).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+          </Select>
+        </Field>
+        <Field label="Expected delivery"><Input type="date" value={expected} onChange={(e) => setExpected(e.target.value)} /></Field>
+        <div className="flex items-end"><Button variant="secondary" onClick={addReorderItems}>Add items running low</Button></div>
+      </div>
+      {supplier && (
+        <p className="mt-2 text-sm text-oak">
+          Terms: net {supplier.paymentTermsDays} · {n(supplier.tradeDiscountPct)}% off list
+          {n(supplier.earlyPayDiscountPct) > 0 && ` · ${n(supplier.earlyPayDiscountPct)}% off if paid in ${supplier.earlyPayDiscountDays} days`}
+        </p>
+      )}
+      <div className="mt-4"><ProductSearch onPick={(p) => setLines((ls) => [...ls, toDraft(p)])} /></div>
+      <div className="mt-3">
+        <Table>
+          <thead><tr><Th>Item</Th><Th className="w-20 text-right">Qty</Th><Th className="w-28 text-right">List price</Th><Th className="w-24 text-right">Discount %</Th><Th className="text-right">Net each</Th><Th className="text-right">Amount</Th><Th /></tr></thead>
+          <tbody>
+            {lines.length === 0 && <tr><Td colSpan={7} className="py-6 text-center text-oak">Search to add items.</Td></tr>}
+            {lines.map((l) => (
+              <tr key={l.key}>
+                <Td><span className="font-semibold text-walnut">{l.itemCode}</span> {l.name}</Td>
+                <Td><Input className="num h-9" type="number" min={0} step="any" value={l.qty} onChange={(e) => update(l.key, { qty: e.target.value })} /></Td>
+                <Td><Input className="num h-9" type="number" min={0} step="0.01" value={l.listPrice} onChange={(e) => update(l.key, { listPrice: e.target.value })} /></Td>
+                <Td><Input className="num h-9" type="number" min={0} max={100} step="0.01" value={l.discountPct} onChange={(e) => update(l.key, { discountPct: e.target.value })} /></Td>
+                <Td className="num pt-4">{money(net(l))}</Td>
+                <Td className="num pt-4 font-medium">{money(n(l.qty) * net(l))}</Td>
+                <Td><button aria-label="Remove" className="p-2 text-oak hover:text-late" onClick={() => setLines((ls) => ls.filter((x) => x.key !== l.key))}><Trash2 size={16} /></button></Td>
+              </tr>
+            ))}
+          </tbody>
+        </Table>
+      </div>
+      <div className="mt-3 flex flex-wrap justify-end gap-6 text-sm">
+        {savings > 0 && <span className="text-paid">Supplier discount saves {money(savings)}</span>}
+        <span className="font-semibold text-walnut">Total {money(total)}</span>
+      </div>
+      <Field label="Notes for the supplier" className="mt-3"><Textarea value={notes} onChange={(e) => setNotes(e.target.value)} /></Field>
+    </Modal>
+  );
+}
 
-          {productsToOrder.length === 0 ? (
-            <div className="text-center py-20 bg-white rounded-2xl border-2 border-dashed border-gray-300">
-              <CheckCircle2 className="w-20 h-20 text-green-500 mx-auto mb-4" />
-              <p className="text-2xl font-semibold text-gray-700">You're Fully Stocked!</p>
-            </div>
-          ) : (
-            <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead className="bg-gray-50 border-b">
-                    <tr>
-                      <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase">Product</th>
-                      <th className="px-6 py-4 text-center text-xs font-medium text-gray-500 uppercase">Stock</th>
-                      <th className="px-6 py-4 text-center text-xs font-medium text-gray-500 uppercase">Need</th>
-                      <th className="px-6 py-4 text-right text-xs font-medium text-gray-500 uppercase">Cost</th>
-                      <th className="px-6 py-4 text-right text-xs font-medium text-gray-500 uppercase">Total</th>
-                      <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase">Vendor</th>
-                      <th className="px-6 py-4 text-center text-xs font-medium text-gray-500 uppercase">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-200">
-                    {productsToOrder.map((product) => (
-                      <tr key={product.id} className="hover:bg-gray-50">
-                        <td className="px-6 py-5 font-medium">{product.name}</td>
-                        <td className="px-6 py-5 text-center">
-                          <span
-                            className={`px-3 py-1 rounded-full text-sm ${
-                              product.stock < 10 ? "bg-red-100 text-red-800" : "bg-green-100 text-green-800"
-                            }`}
-                          >
-                            {product.stock}
-                          </span>
-                        </td>
-                        <td className="px-6 py-5 text-center">
-                          <span className="px-4 py-2 bg-red-500 text-white rounded-full font-bold text-lg">
-                            {product.needToOrder}
-                          </span>
-                        </td>
-                        <td className="px-6 py-5 text-right">${product.inputcost.toFixed(2)}</td>
-                        <td className="px-6 py-5 text-right font-bold text-green-600">
-                          ${(product.inputcost * product.needToOrder).toFixed(2)}
-                        </td>
-                        <td className="px-6 py-5 text-sm text-gray-600">{product.vendors.join(", ")}</td>
-                        <td className="px-6 py-5 text-center">
-                          <button
-                            onClick={() => openBillingModal(product)}
-                            className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition shadow-sm"
-                          >
-                            <FileText className="w-4 h-4" />
-                            Create Billing Order
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
+function PoDetail({ po, onClose, onChanged }: { po: Po | null; onClose: () => void; onChanged: () => void }) {
+  const { busy, run } = useAction();
+  const [receiving, setReceiving] = useState(false);
+  const [bill, setBill] = useState({ billNo: "", billDate: isoDay(), freight: "", taxAmount: "", notes: "" });
+  const [recv, setRecv] = useState<Record<number, { qty: string; cost: string }>>({});
+
+  useEffect(() => {
+    if (!po?.lines) return;
+    setRecv(
+      Object.fromEntries(
+        po.lines.map((l) => [l.id, { qty: String(Math.max(0, n(l.qty) - n(l.qtyReceived))), cost: String(n(l.unitCost)) }])
+      )
+    );
+    setBill({ billNo: "", billDate: isoDay(), freight: "", taxAmount: "", notes: "" });
+  }, [po]);
+
+  if (!po) return null;
+  const act = async (path: string, msg: string) => {
+    if (await run(() => api(path, { body: {} }), msg)) onChanged();
+  };
+
+  async function receive() {
+    const ok = await run(
+      () =>
+        api(`/purchase-orders/${po!.id}/receive`, {
+          body: {
+            billNo: bill.billNo,
+            billDate: bill.billDate,
+            freight: n(bill.freight),
+            taxAmount: n(bill.taxAmount),
+            notes: bill.notes,
+            lines: po!.lines!.map((l) => ({ lineId: l.id, qtyReceived: n(recv[l.id]?.qty), unitCost: n(recv[l.id]?.cost) })),
+          },
+        }),
+      "Received — stock added and bill sent to accounts payable"
+    );
+    if (ok) {
+      setReceiving(false);
+      onChanged();
+    }
+  }
+
+  return (
+    <>
+      <Modal
+        open={!receiving}
+        onClose={onClose}
+        wide
+        title={`Purchase order ${po.poNo}`}
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => openPdf(`/purchase-orders/${po.id}/pdf`)}>Open PDF</Button>
+            {po.status === "DRAFT" && <Button variant="secondary" busy={busy} onClick={() => act(`/purchase-orders/${po.id}/ordered`, "Marked as ordered")}>Mark as sent to supplier</Button>}
+            {(po.status === "DRAFT" || po.status === "ORDERED") && (
+              <>
+                <Button variant="danger" busy={busy} onClick={() => act(`/purchase-orders/${po.id}/cancel`, "Purchase order cancelled")}>Cancel PO</Button>
+                <Button onClick={() => setReceiving(true)}>Receive goods &amp; bill</Button>
+              </>
+            )}
+          </>
+        }
+      >
+        <div className="mb-4 flex flex-wrap gap-6 text-sm">
+          <div><div className="text-oak">Supplier</div>{po.supplier.name}</div>
+          <div><div className="text-oak">Ordered</div>{date(po.orderDate)}</div>
+          <div><div className="text-oak">Expected</div>{date(po.expectedDate)}</div>
+          <div><div className="text-oak">Status</div><Badge tone={STATUS[po.status].tone}>{STATUS[po.status].label}</Badge></div>
+          {po.bills?.map((b) => (
+            <div key={b.id}><div className="text-oak">Bill</div><Link className="underline" href={`/billing-orders?open=${b.id}`}>{b.billNo}</Link></div>
+          ))}
         </div>
+        <Table>
+          <thead><tr><Th>Code</Th><Th>Item</Th><Th className="text-right">Ordered</Th><Th className="text-right">Received</Th><Th className="text-right">List</Th><Th className="text-right">Disc.</Th><Th className="text-right">Net each</Th><Th className="text-right">Amount</Th></tr></thead>
+          <tbody>
+            {po.lines?.map((l) => (
+              <tr key={l.id}>
+                <Td><ItemCode code={l.product.itemCode} productId={l.productId} /></Td>
+                <Td>{l.product.name}</Td>
+                <Td className="num">{qty(l.qty)}</Td>
+                <Td className="num">{qty(l.qtyReceived)}</Td>
+                <Td className="num">{money(l.listPrice)}</Td>
+                <Td className="num">{n(l.discountPct)}%</Td>
+                <Td className="num">{money(l.unitCost)}</Td>
+                <Td className="num font-medium">{money(l.lineTotal)}</Td>
+              </tr>
+            ))}
+          </tbody>
+        </Table>
+        <p className="mt-3 text-right font-semibold text-walnut">Total {money(po.subtotal)}</p>
+        {po.notes && <p className="mt-2 text-sm text-oak">{po.notes}</p>}
+      </Modal>
 
-        {/* Billing Modal */}
-        {isModalOpen && selectedProduct && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-2xl shadow-2xl max-w-6xl w-full max-h-[92vh] overflow-y-auto">
-              <div className="flex justify-between items-center p-6 border-b sticky top-0 bg-white z-10">
-                <h2 className="text-2xl font-bold">Create Billing Order</h2>
-                <button onClick={() => setIsModalOpen(false)} className="p-2 hover:bg-gray-100 rounded-lg">
-                  <X className="w-6 h-6" />
-                </button>
-              </div>
-
-              <div className="p-6 space-y-8">
-                <div className="grid grid-cols-2 gap-6">
-                  <input
-                    placeholder="Company Name"
-                    className="px-4 py-3 border rounded-lg"
-                    value={billingData.companyName}
-                    onChange={(e) => setBillingData((p) => ({ ...p, companyName: e.target.value }))}
-                  />
-                  <input
-                    placeholder="Invoice No (required)"
-                    className="px-4 py-3 border-2 border-red-500 rounded-lg font-bold text-red-700 placeholder-red-400"
-                    value={billingData.invoiceNo}
-                    onChange={(e) => setBillingData((p) => ({ ...p, invoiceNo: e.target.value }))}
-                  />
-                  <input
-                    placeholder="Company Address"
-                    className="px-4 py-3 border rounded-lg"
-                    value={billingData.companyAddr1}
-                    onChange={(e) => setBillingData((p) => ({ ...p, companyAddr1: e.target.value }))}
-                  />
-                  <input
-                    type="date"
-                    className="px-4 py-3 border rounded-lg"
-                    value={billingData.date}
-                    onChange={(e) => setBillingData((p) => ({ ...p, date: e.target.value }))}
-                  />
-                  <input
-                    placeholder="Phone"
-                    className="px-4 py-3 border rounded-lg"
-                    value={billingData.phone}
-                    onChange={(e) => setBillingData((p) => ({ ...p, phone: e.target.value }))}
-                  />
-                  <input
-                    placeholder="Salesman"
-                    className="px-4 py-3 border rounded-lg"
-                    value={billingData.salesman}
-                    onChange={(e) => setBillingData((p) => ({ ...p, salesman: e.target.value }))}
-                  />
-                </div>
-
-                <div className="bg-gray-50 p-6 rounded-xl">
-                  <div className="flex justify-between items-center mb-4">
-                    <h3 className="font-bold text-lg">Items</h3>
-                    <button
-                      onClick={() =>
-                        setBillingData((p) => ({
-                          ...p,
-                          items: [...p.items, { item: "", qty: "", description: "", rate: "" }],
-                        }))
-                      }
-                      className="text-blue-600 hover:text-blue-800 font-medium"
-                    >
-                      + Add Item
-                    </button>
-                  </div>
-
-                  <div className="space-y-3">
-                    {billingData.items.map((item, i) => (
-                      <div key={i} className="grid grid-cols-12 gap-3 items-center bg-white p-4 rounded-lg border">
-                        <input
-                          placeholder="Item"
-                          value={item.item}
-                          onChange={(e) => {
-                            const newItems = [...billingData.items];
-                            newItems[i].item = e.target.value;
-                            setBillingData((p) => ({ ...p, items: newItems }));
-                          }}
-                          className="col-span-4 px-3 py-2 border rounded"
-                        />
-                        <input
-                          type="number"
-                          placeholder="Qty"
-                          value={item.qty}
-                          onChange={(e) => {
-                            const newItems = [...billingData.items];
-                            newItems[i].qty = e.target.value === "" ? "" : Number(e.target.value);
-                            setBillingData((p) => ({ ...p, items: newItems }));
-                          }}
-                          className="col-span-2 px-3 py-2 border rounded text-center font-bold"
-                        />
-                        <input
-                          placeholder="Description"
-                          value={item.description}
-                          onChange={(e) => {
-                            const newItems = [...billingData.items];
-                            newItems[i].description = e.target.value;
-                            setBillingData((p) => ({ ...p, items: newItems }));
-                          }}
-                          className="col-span-3 px-3 py-2 border rounded"
-                        />
-                        <input
-                          type="number"
-                          step="0.01"
-                          placeholder="Rate"
-                          value={item.rate}
-                          onChange={(e) => {
-                            const newItems = [...billingData.items];
-                            newItems[i].rate = e.target.value === "" ? "" : Number(e.target.value);
-                            setBillingData((p) => ({ ...p, items: newItems }));
-                          }}
-                          className="col-span-2 px-3 py-2 border rounded text-right"
-                        />
-                        <div className="col-span-1 text-right font-bold text-green-600">
-                          ${(Number(item.qty || 0) * Number(item.rate || 0)).toFixed(2)}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="mt-8 text-right">
-                    <p className="text-3xl font-bold text-green-600">
-                      Total: ${billingData.items.reduce((s, i) => s + Number(i.qty || 0) * Number(i.rate || 0), 0).toFixed(2)}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex justify-end gap-4 pt-4 border-t">
-                  <button
-                    onClick={() => setIsModalOpen(false)}
-                    className="px-6 py-3 border rounded-lg hover:bg-gray-50"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={handleSubmitBilling}
-                    className="px-8 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium shadow-lg"
-                  >
-                    Generate & Save PDF
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-      </main>
-    </div>
+      <Modal
+        open={receiving}
+        onClose={() => setReceiving(false)}
+        wide
+        title={`Receive ${po.poNo}`}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setReceiving(false)}>Back</Button>
+            <Button onClick={receive} busy={busy} disabled={!bill.billNo.trim()}>Receive and add bill</Button>
+          </>
+        }
+      >
+        <p className="mb-4 text-sm text-oak">Enter what actually arrived and the supplier&apos;s invoice. Freight and tax are spread into each item&apos;s cost.</p>
+        <div className="grid gap-4 sm:grid-cols-4">
+          <Field label="Supplier invoice #"><Input value={bill.billNo} onChange={(e) => setBill({ ...bill, billNo: e.target.value })} /></Field>
+          <Field label="Invoice date"><Input type="date" value={bill.billDate} onChange={(e) => setBill({ ...bill, billDate: e.target.value })} /></Field>
+          <Field label="Freight"><Input type="number" step="0.01" min={0} value={bill.freight} onChange={(e) => setBill({ ...bill, freight: e.target.value })} /></Field>
+          <Field label="Tax on invoice"><Input type="number" step="0.01" min={0} value={bill.taxAmount} onChange={(e) => setBill({ ...bill, taxAmount: e.target.value })} /></Field>
+        </div>
+        <div className="mt-4">
+          <Table>
+            <thead><tr><Th>Item</Th><Th className="text-right">Still to come</Th><Th className="w-28 text-right">Received now</Th><Th className="w-32 text-right">Cost each</Th></tr></thead>
+            <tbody>
+              {po.lines?.map((l) => (
+                <tr key={l.id}>
+                  <Td><b className="text-walnut">{l.product.itemCode}</b> {l.product.name}</Td>
+                  <Td className="num">{qty(n(l.qty) - n(l.qtyReceived))}</Td>
+                  <Td><Input className="num h-9" type="number" min={0} step="any" value={recv[l.id]?.qty ?? ""} onChange={(e) => setRecv({ ...recv, [l.id]: { ...recv[l.id], qty: e.target.value } })} /></Td>
+                  <Td><Input className="num h-9" type="number" min={0} step="0.01" value={recv[l.id]?.cost ?? ""} onChange={(e) => setRecv({ ...recv, [l.id]: { ...recv[l.id], cost: e.target.value } })} /></Td>
+                </tr>
+              ))}
+            </tbody>
+          </Table>
+        </div>
+        <Field label="Notes" className="mt-3"><Input value={bill.notes} onChange={(e) => setBill({ ...bill, notes: e.target.value })} /></Field>
+      </Modal>
+    </>
   );
 }

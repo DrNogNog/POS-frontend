@@ -1,366 +1,128 @@
 "use client";
+// -----------------------------------------------------------------------------
+// Accounts receivable board: what customers owe us, how late it is, and
+// whether A/R is too high (slow collections) or too low (terms too rigid).
+// -----------------------------------------------------------------------------
+import Link from "next/link";
+import { useState } from "react";
+import { useApi } from "@/lib/hooks";
+import { date, firstLine, healthTone, money, pct } from "@/lib/format";
+import type { Aging, Invoice } from "@/lib/types";
+import { Badge, Button, Empty, ErrorNote, Loading, PageHeader, Panel, Stat, Table, Td, Th } from "@/components/ui";
+import { InvoiceStatus } from "@/components/status";
+import AgingBars from "@/components/AgingBars";
+import { PaymentDialog } from "@/components/forms";
 
-import { useState, useEffect } from "react";
-import Sidebar from "@/components/sidebar";
-import {
-  Search,
-  DollarSign,
-  TrendingUp,
-  AlertCircle,
-  Clock,
-  CheckCircle2,
-} from "lucide-react";
-
-interface Invoice {
-  id: number;
-  invoiceNo: string;
-  total: string;
-  paidAmount: string;
-  dueDate: string;
-  status: "PENDING" | "PAID" | "PARTIALLY_PAID" | "OVERDUE";
-  createdAt: string;
-  daysOverdue?: number;
+interface Board {
+  aging: Aging;
+  health: { dso: number; overduePct: number; creditSalesPct: number; turnover: number; level: string; headline: string; advice: string[] };
+  salesInPeriod: number;
+  periodDays: number;
+  collectedThisMonth: number;
+  discountsGivenThisMonth: number;
+  needsCollections: number;
+  topCustomers: { customerId: number | null; name: string; balance: number; overdue: number }[];
+  invoices: (Invoice & { bucket: string })[];
 }
 
-export default function AccountsReceivablePage() {
-  const [invoices, setInvoices] = useState<Invoice[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [filterStatus, setFilterStatus] = useState<string>("all");
+const LEVEL_LABEL: Record<string, string> = { HIGH: "Too high", LOW: "Very low", HEALTHY: "Healthy", NO_DATA: "Not enough data" };
 
-  // Payment modal
-  const [modalOpen, setModalOpen] = useState(false);
-  const [selectedInv, setSelectedInv] = useState<Invoice | null>(null);
-  const [paymentInput, setPaymentInput] = useState("");
+export default function ReceivablesPage() {
+  const { data, error, loading, reload } = useApi<Board>("/receivables");
+  const [bucket, setBucket] = useState("");
+  const [paying, setPaying] = useState<Invoice | null>(null);
 
-  // Due Date Edit modal
-  const [editingDueDate, setEditingDueDate] = useState<Invoice | null>(null);
-  const [newDueDate, setNewDueDate] = useState("");
-
-  useEffect(() => {
-    fetchInvoices();
-  }, []);
-
-  async function fetchInvoices() {
-    try {
-      const res = await fetch("http://localhost:4000/api/invoices");
-      if (!res.ok) throw new Error("Failed");
-      const data = await res.json();
-
-      const now = new Date();
-
-      const enriched = data.map((inv: any) => {
-        const total = parseFloat(inv.total);
-        const paid = parseFloat(inv.paidAmount || "0");
-        const due = new Date(inv.dueDate);
-        const isOverdue = now > due;
-        const daysOverdue = Math.max(0, Math.floor((now.getTime() - due.getTime()) / 86400000));
-
-        let status: Invoice["status"] = inv.status || "PENDING";
-
-        if (status !== "PAID" && status !== "PARTIALLY_PAID") {
-          if (paid >= total) status = "PAID";
-          else if (paid > 0) status = "PARTIALLY_PAID";
-          else if (isOverdue) status = "OVERDUE";
-        }
-
-        return {
-          ...inv,
-          status,
-          daysOverdue: status === "OVERDUE" ? daysOverdue : 0,
-        };
-      });
-
-      setInvoices(enriched);
-    } catch (err) {
-      alert("Failed to load invoices");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  // Record Payment
-  const recordPayment = async () => {
-    if (!selectedInv || !paymentInput || parseFloat(paymentInput) <= 0) return;
-
-    const amount = parseFloat(paymentInput);
-    try {
-      await fetch(`http://localhost:4000/api/invoices/${selectedInv.id}/pay`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ amount }),
-      });
-
-      setModalOpen(false);
-      setPaymentInput("");
-      setSelectedInv(null);
-      fetchInvoices();
-    } catch {
-      alert("Payment failed");
-    }
-  };
-
-  // Save New Due Date — FIXED: was "async ()adecimal" → now correct
-  const saveNewDueDate = async () => {
-    if (!editingDueDate || !newDueDate) return;
-
-    try {
-      await fetch(`http://localhost:4000/api/invoices/${editingDueDate.id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ dueDate: newDueDate }),
-      });
-
-      setEditingDueDate(null);
-      setNewDueDate("");
-      fetchInvoices();
-    } catch {
-      alert("Failed to update due date");
-    }
-  };
-
-  // Calculations
-  const totalReceivable = invoices
-    .filter((i) => i.status !== "PAID")
-    .reduce((sum, i) => sum + (parseFloat(i.total) - parseFloat(i.paidAmount || "0")), 0);
-
-  const overdueAmount = invoices
-    .filter((i) => i.status === "OVERDUE")
-    .reduce((sum, i) => sum + (parseFloat(i.total) - parseFloat(i.paidAmount || "0")), 0);
-
-  const collectedThisMonth = invoices.reduce((sum, i) => {
-    const paid = parseFloat(i.paidAmount || "0");
-    const month = new Date(i.createdAt).getMonth();
-    return month === new Date().getMonth() ? sum + paid : sum;
-  }, 0);
-
-  const filtered = invoices.filter(
-    (i) =>
-      i.invoiceNo.toLowerCase().includes(searchTerm.toLowerCase()) &&
-      (filterStatus === "all" || i.status === filterStatus)
-  );
-
-  const getStatusBadge = (status: Invoice["status"]) => {
-    const map = {
-      PAID: { label: "Paid in Full", color: "bg-green-100 text-green-800", icon: CheckCircle2 },
-      PARTIALLY_PAID: { label: "Partially Paid", color: "bg-yellow-100 text-yellow-800", icon: DollarSign },
-      OVERDUE: { label: "Overdue", color: "bg-red-100 text-red-800", icon: AlertCircle },
-      PENDING: { label: "Pending", color: "bg-gray-100 text-gray-800", icon: Clock },
-    };
-    const config = map[status];
-    const Icon = config.icon;
-    return (
-      <span className={`px-3 py-1.5 rounded-full text-xs font-medium flex items-center gap-1.5 w-fit ${config.color}`}>
-        <Icon className="w-4 h-4" />
-        {config.label}
-      </span>
-    );
-  };
-
-  if (loading) return <div className="flex min-h-screen items-center justify-center text-2xl">Loading...</div>;
+  if (error) return <ErrorNote>{error}</ErrorNote>;
+  if (loading && !data) return <Loading />;
+  if (!data) return null;
+  const list = data.invoices.filter((i) => !bucket || i.bucket === bucket);
 
   return (
-    <div className="flex min-h-screen bg-zinc-100">
-      <Sidebar />
-      <main className="flex-1 p-8">
-        <h1 className="text-4xl font-bold text-gray-900 mb-10">Accounts Receivable</h1>
+    <>
+      <PageHeader
+        title="Accounts receivable"
+        subtitle="Money customers owe us. Invoices on 30, 60 or 90-day terms land here until they're paid."
+        actions={<Link href="/invoices?status=UNPAID"><Button variant="secondary">All unpaid invoices</Button></Link>}
+      />
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <Stat label="Customers owe us" value={money(data.aging.total)} />
+        <Stat label="Past due" value={money(data.aging.total - data.aging.current)} tone={data.aging.total - data.aging.current > 0 ? "late" : "ink"} note={`${pct(data.health.overduePct, 0)} of receivables`} />
+        <Stat label="Collected this month" value={money(data.collectedThisMonth)} tone="paid" note={data.discountsGivenThisMonth > 0 ? `${money(data.discountsGivenThisMonth)} given as early-pay discounts` : undefined} />
+        <Stat label="Days to get paid (DSO)" value={Math.round(data.health.dso)} note={`Last ${data.periodDays} days · A/R turns over ${data.health.turnover}× a year`} />
+      </div>
 
-        {/* Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
-          <div className="bg-white rounded-2xl shadow-lg p-6 border">
-            <p className="text-sm text-gray-600">Total Receivable</p>
-            <p className="text-3xl font-bold text-blue-600 mt-2">${totalReceivable.toFixed(2)}</p>
-          </div>
-          <div className="bg-white rounded-2xl shadow-lg p-6 border">
-            <p className="text-sm text-gray-600">Overdue</p>
-            <p className="text-3xl font-bold text-red-600 mt-2">${overdueAmount.toFixed(2)}</p>
-          </div>
-          <div className="bg-white rounded-2xl shadow-lg p-6 border">
-            <p className="text-sm text-gray-600">Collected This Month</p>
-            <p className="text-3xl font-bold text-green-600 mt-2">${collectedThisMonth.toFixed(2)}</p>
-          </div>
-          <div className="bg-white rounded-2xl shadow-lg p-6 border">
-            <p className="text-sm text-gray-600">Pending</p>
-            <p className="text-3xl font-bold text-amber-600 mt-2">
-              {invoices.filter((i) => i.status !== "PAID").length}
-            </p>
-          </div>
-        </div>
-
-        {/* Search + Filter */}
-        <div className="bg-white rounded-2xl shadow-lg p-6 mb-8">
-          <div className="flex gap-4">
-            <div className="flex-1 relative">
-              <Search className="absolute left-3 top-3 w-5 h-5 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Search invoice..."
-                className="w-full pl-10 pr-4 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
-            </div>
-            <select
-              value={filterStatus}
-              onChange={(e) => setFilterStatus(e.target.value)}
-              className="px-6 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="all">All Status</option>
-              <option value="PENDING">Pending</option>
-              <option value="PARTIALLY_PAID">Partially Paid</option>
-              <option value="PAID">Paid in Full</option>
-              <option value="OVERDUE">Overdue</option>
-            </select>
-          </div>
-        </div>
-
-        {/* Table */}
-        <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
-          <table className="w-full">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-8 py-5 text-left text-xs font-semibold text-gray-600 uppercase">Invoice</th>
-                <th className="px-8 py-5 text-left text-xs font-semibold text-gray-600 uppercase">Amount</th>
-                <th className="px-8 py-5 text-left text-xs font-semibold text-gray-600 uppercase">Due Date</th>
-                <th className="px-8 py-5 text-left text-xs font-semibold text-gray-600 uppercase">Status</th>
-                <th className="px-8 py-5 text-left text-xs font-semibold text-gray-600 uppercase">Action</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y">
-              {filtered.map((inv) => {
-                const remaining = parseFloat(inv.total) - parseFloat(inv.paidAmount || "0");
-                return (
-                  <tr key={inv.id} className="hover:bg-gray-50">
-                    <td className="px-8 py-6 font-semibold text-blue-700 text-lg">#{inv.invoiceNo}</td>
-                    <td className="px-8 py-6">
-                      <div className="text-lg font-medium">${parseFloat(inv.total).toFixed(2)}</div>
-                      {inv.status === "PARTIALLY_PAID" && (
-                        <div className="text-sm text-gray-600 mt-1">
-                          Paid: <span className="font-medium">${parseFloat(inv.paidAmount).toFixed(2)}</span> • 
-                          <span className="text-amber-600 font-medium">Due: ${remaining.toFixed(2)}</span>
-                        </div>
-                      )}
-                    </td>
-                    <td className="px-8 py-6">
-                      <div className="flex items-center gap-3">
-                        <span className="text-gray-700">
-                          {new Date(inv.dueDate).toLocaleDateString("en-US", {
-                            month: "short",
-                            day: "numeric",
-                            year: "numeric",
-                          })}
-                        </span>
-                        <button
-                          onClick={() => {
-                            setEditingDueDate(inv);
-                            setNewDueDate(inv.dueDate.split("T")[0]); // YYYY-MM-DD
-                          }}
-                          className="text-blue-600 hover:text-blue-800 text-sm font-medium underline"
-                        >
-                          Edit
-                        </button>
-                      </div>
-                      {inv.status === "OVERDUE" && (
-                        <div className="mt-2">
-                          <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold text-red-700 bg-red-100">
-                            {inv.daysOverdue} {inv.daysOverdue === 1 ? "day" : "days"} overdue
-                          </span>
-                        </div>
-                      )}
-                    </td>
-                    <td className="px-8 py-6">{getStatusBadge(inv.status)}</td>
-                    <td className="px-8 py-6">
-                      {inv.status !== "PAID" && (
-                        <button
-                          onClick={() => {
-                            setSelectedInv(inv);
-                            setPaymentInput(remaining.toFixed(2));
-                            setModalOpen(true);
-                          }}
-                          className="px-5 py-2.5 bg-green-600 text-white font-medium rounded-lg hover:bg-green-700 transition shadow-md"
-                        >
-                          Record Payment
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
+      <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)]">
+        <Panel title="Is A/R too high or too low?">
+          <Badge tone={healthTone(data.health.level)}>{LEVEL_LABEL[data.health.level]}</Badge>
+          <p className="mt-3 text-lg text-walnut">{data.health.headline}</p>
+          <ul className="mt-4 list-disc space-y-1 pl-5 text-sm">
+            {data.health.advice.map((a) => <li key={a}>{a}</li>)}
+          </ul>
+          <dl className="mt-5 grid grid-cols-2 gap-2 border-t border-hairline pt-4 text-sm">
+            <dt className="text-oak">Sales on account (last {data.periodDays} days)</dt>
+            <dd className="num">{pct(data.health.creditSalesPct, 0)}</dd>
+            <dt className="text-oak">Ready for collections</dt>
+            <dd className="num">{data.needsCollections} invoices</dd>
+          </dl>
+          <p className="mt-4 text-xs text-oak">The too-high / too-low thresholds are set on the Settings screen.</p>
+        </Panel>
+        <Panel title="How late is the money?">
+          <AgingBars aging={data.aging} selected={bucket} onSelect={setBucket} />
+          <h3 className="mb-2 mt-6 text-sm font-semibold text-walnut">Who owes the most</h3>
+          <Table>
+            <tbody>
+              {data.topCustomers.slice(0, 6).map((c) => (
+                <tr key={c.name}>
+                  <Td>{c.customerId ? <Link href={`/customers/${c.customerId}`} className="underline">{c.name}</Link> : c.name}</Td>
+                  <Td className="num">{money(c.balance)}</Td>
+                  <Td className="num text-late">{c.overdue > 0 ? `${money(c.overdue)} late` : ""}</Td>
+                </tr>
+              ))}
             </tbody>
-          </table>
-        </div>
+          </Table>
+        </Panel>
+      </div>
 
-        {/* Payment Modal */}
-        {modalOpen && selectedInv && (
-          <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50">
-            <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md">
-              <h2 className="text-2xl font-bold mb-6">Record Payment</h2>
-              <p className="text-lg font-medium text-blue-700 mb-6">Invoice #{selectedInv.invoiceNo}</p>
-              <div className="space-y-4 mb-8 text-sm">
-                <div>Total: <strong>${parseFloat(selectedInv.total).toFixed(2)}</strong></div>
-                <div>Paid: <strong>${parseFloat(selectedInv.paidAmount || "0").toFixed(2)}</strong></div>
-                <div className="text-amber-600 text-lg">
-                  Remaining: <strong>${(parseFloat(selectedInv.total) - parseFloat(selectedInv.paidAmount || "0")).toFixed(2)}</strong>
-                </div>
-              </div>
-              <input
-                type="number"
-                step="0.01"
-                value={paymentInput}
-                onChange={(e) => setPaymentInput(e.target.value)}
-                className="w-full px-5 py-4 border-2 rounded-xl text-lg mb-6 focus:border-blue-500"
-                placeholder="0.00"
-              />
-              <div className="flex justify-end gap-4">
-                <button onClick={() => setModalOpen(false)} className="px-6 py-3 border-2 rounded-xl hover:bg-gray-50">
-                  Cancel
-                </button>
-                <button onClick={recordPayment} className="px-8 py-3 bg-green-600 text-white rounded-xl hover:bg-green-700 font-medium">
-                  Confirm Payment
-                </button>
-              </div>
-            </div>
-          </div>
+      <Panel
+        className="mt-6"
+        padded={false}
+        title={bucket ? `Open invoices — ${bucket === "current" ? "not due yet" : `${bucket} days late`}` : "Open invoices"}
+        actions={bucket && <Button size="sm" variant="ghost" onClick={() => setBucket("")}>Show all</Button>}
+      >
+        {list.length === 0 ? (
+          <Empty>Nothing owed here.</Empty>
+        ) : (
+          <Table>
+            <thead>
+              <tr><Th>Invoice</Th><Th>Customer</Th><Th>Issued</Th><Th>Due</Th><Th className="text-right">Balance</Th><Th>Status</Th><Th /></tr>
+            </thead>
+            <tbody>
+              {list.map((i) => (
+                <tr key={i.id}>
+                  <Td><Link href={`/invoices/${i.id}`} className="font-semibold text-walnut underline">{i.invoiceNo}</Link></Td>
+                  <Td>{i.customer?.name ?? firstLine(i.billTo)}{i.customer?.phone && <div className="text-xs text-oak">{i.customer.phone}</div>}</Td>
+                  <Td>{date(i.issueDate)}</Td>
+                  <Td>{date(i.dueDate)}</Td>
+                  <Td className="num font-medium">{money(i.balance)}</Td>
+                  <Td><InvoiceStatus inv={i} /></Td>
+                  <Td className="text-right"><Button size="sm" variant="success" onClick={() => setPaying(i)}>Payment</Button></Td>
+                </tr>
+              ))}
+            </tbody>
+          </Table>
         )}
+      </Panel>
 
-        {/* Due Date Edit Modal */}
-        {editingDueDate && (
-          <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50">
-            <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md">
-              <h2 className="text-2xl font-bold mb-6">Change Due Date</h2>
-              <p className="text-lg font-medium text-blue-700 mb-6">Invoice #{editingDueDate.invoiceNo}</p>
-
-              <div className="mb-8">
-                <label className="block text-sm font-medium text-gray-700 mb-3">New Due Date</label>
-                <input
-                  type="date"
-                  value={newDueDate}
-                  onChange={(e) => setNewDueDate(e.target.value)}
-                  className="w-full px-5 py-4 border-2 border-gray-300 rounded-xl text-lg focus:border-blue-500 focus:outline-none"
-                />
-              </div>
-
-              <div className="flex justify-end gap-4">
-                <button
-                  onClick={() => {
-                    setEditingDueDate(null);
-                    setNewDueDate("");
-                  }}
-                  className="px-6 py-3 border-2 rounded-xl hover:bg-gray-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={saveNewDueDate}
-                  className="px-8 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 font-medium"
-                >
-                  Save Due Date
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-      </main>
-    </div>
+      <PaymentDialog
+        open={!!paying}
+        onClose={() => setPaying(null)}
+        title={paying ? `Payment on ${paying.invoiceNo}` : ""}
+        balance={paying?.balance ?? 0}
+        discount={paying?.earlyDiscountAvailableNow ? paying.earlyDiscountAmount : 0}
+        discountDeadline={paying?.earlyDiscountDeadline}
+        endpoint={`/invoices/${paying?.id}/payments`}
+        onDone={reload}
+      />
+    </>
   );
 }

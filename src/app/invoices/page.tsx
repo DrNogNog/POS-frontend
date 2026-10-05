@@ -1,170 +1,102 @@
 "use client";
-
-import { useState, useEffect } from "react";
-import Sidebar from "@/components/sidebar";
-
-type Invoice = {
-  id: number;
-  invoiceNo: string;
-  createdAt: string;
-  total: number;
-};
+// All invoices, sortable by date, with filters.
+import Link from "next/link";
+import { useEffect, useState } from "react";
+import { useApi, useDebounced, useQueryParam, useSort } from "@/lib/hooks";
+import { date, firstLine, money } from "@/lib/format";
+import type { Invoice } from "@/lib/types";
+import { Button, Empty, ErrorNote, Field, Input, Loading, PageHeader, Panel, Select, Table, Td, Th } from "@/components/ui";
+import { InvoiceStatus } from "@/components/status";
 
 export default function InvoicesPage() {
-  const [invoices, setInvoices] = useState<Invoice[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [pdfLoading, setPdfLoading] = useState<number | null>(null); // track which PDF is loading
-  const [deleteLoading, setDeleteLoading] = useState<number | null>(null); // track which invoice is deleting
-
+  const [q, setQ] = useState("");
+  const [status, setStatus] = useState("");
+  const statusParam = useQueryParam("status");
   useEffect(() => {
-    fetchInvoices();
-  }, []);
-
-  // Fetch list of invoices
-  async function fetchInvoices() {
-    try {
-      const res = await fetch("http://localhost:4000/api/invoices");
-      if (!res.ok) throw new Error("Failed to fetch invoices");
-      const data: Invoice[] = await res.json();
-      setInvoices(data);
-    } catch (err) {
-      console.error(err);
-      alert("Failed to load invoices.");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  // Convert Base64 string to Blob
-  function base64ToBlob(base64: string, type = "application/pdf") {
-    if (typeof base64 !== "string") {
-      throw new Error("PDF data is not a string");
-    }
-    const cleaned = base64.replace(/\s/g, "");
-    const base64String = cleaned.replace(/-/g, "+").replace(/_/g, "/");
-
-    const binary = atob(base64String);
-    const array = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i++) {
-      array[i] = binary.charCodeAt(i);
-    }
-    return new Blob([array], { type });
-  }
-
-  // Open PDF in new tab
-  async function viewPDF(invoiceId: number) {
-    setPdfLoading(invoiceId);
-    try {
-      const res = await fetch(`http://localhost:4000/api/invoices/${invoiceId}`);
-      if (!res.ok) throw new Error("Failed to fetch PDF");
-
-      const data: { pdf?: Record<number, number> } = await res.json();
-      if (!data.pdf) throw new Error("Invalid or missing PDF data");
-
-      const byteKeys = Object.keys(data.pdf).map(Number).sort((a, b) => a - b);
-      const byteArray = new Uint8Array(byteKeys.length);
-      byteKeys.forEach((k, i) => {
-        byteArray[i] = data.pdf![k]; // ! tells TS "I know it's defined"
-        });
-
-      const blob = new Blob([byteArray], { type: "application/pdf" });
-      const url = URL.createObjectURL(blob);
-      window.open(url, "_blank");
-    } catch (err) {
-      console.error(err);
-      alert("Failed to load PDF: " + (err instanceof Error ? err.message : err));
-    } finally {
-      setPdfLoading(null);
-    }
-  }
-
-  // Delete invoice with confirmation
-  async function handleDelete(invoiceId: number) {
-    const confirmed = confirm("Are you sure you want to delete this invoice?");
-    if (!confirmed) return;
-
-    setDeleteLoading(invoiceId);
-    try {
-      const res = await fetch(`http://localhost:4000/api/invoices/${invoiceId}`, {
-        method: "DELETE",
-      });
-      if (!res.ok) throw new Error("Failed to delete invoice");
-
-      // Remove deleted invoice from state
-      setInvoices((prev) => prev.filter((inv) => inv.id !== invoiceId));
-    } catch (err) {
-      console.error(err);
-      alert("Failed to delete invoice: " + (err instanceof Error ? err.message : err));
-    } finally {
-      setDeleteLoading(null);
-    }
-  }
-
-  if (loading) return <div className="p-8 text-lg">Loading invoices...</div>;
+    if (statusParam) setStatus(statusParam);
+  }, [statusParam]);
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
+  const [page, setPage] = useState(1);
+  const sort = useSort<"issueDate" | "dueDate" | "total" | "invoiceNo">("issueDate");
+  const debounced = useDebounced(q);
+  const params = new URLSearchParams({ page: String(page), limit: "100", sort: sort.sort, dir: sort.dir });
+  if (debounced) params.set("q", debounced);
+  if (status === "OVERDUE") {
+    params.set("status", "UNPAID");
+    params.set("overdue", "true");
+  } else if (status) params.set("status", status);
+  if (from) params.set("from", from);
+  if (to) params.set("to", to);
+  const { data, error, loading } = useApi<{ items: Invoice[]; total: number }>(`/invoices?${params}`);
 
   return (
-    <div className="flex min-h-screen">
-      <Sidebar />
-      <main className="flex-1 p-6 bg-gray-50 dark:bg-gray-900">
-        <h1 className="text-2xl font-bold mb-4 text-gray-800 dark:text-gray-200">
-          Invoices
-        </h1>
-
-        <div className="bg-white rounded-xl shadow overflow-hidden">
-          <table className="w-full">
-            <thead className="bg-indigo-600 text-white">
-              <tr>
-                <th className="px-6 py-4 text-left">Invoice #</th>
-                <th className="px-6 py-4 text-left">Created At</th>
-                <th className="px-6 py-4 text-left"> Total </th>
-                <th className="px-6 py-4 text-left">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200">
-              {invoices.length === 0 ? (
-                <tr>
-                  <td colSpan={3} className="px-6 py-20 text-center text-gray-500">
-                    No invoices yet.
-                  </td>
-                </tr>
-              ) : (
-                invoices.map((inv) => (
-                  <tr key={inv.id} className="hover:bg-gray-50 transition">
-                    <td className="px-6 py-4 text-indigo-600 font-medium">{inv.invoiceNo}</td>
-                    <td className="px-6 py-4">{new Date(inv.createdAt).toLocaleDateString()}</td>
-                    <td className="px-6 py-4"> {inv.total} </td>
-                    <td className="px-6 py-4 space-x-2">
-                      <button
-                        onClick={() => viewPDF(inv.id)}
-                        disabled={pdfLoading === inv.id}
-                        className={`px-4 py-2 text-white rounded text-sm ${
-                          pdfLoading === inv.id
-                            ? "bg-gray-400 cursor-not-allowed"
-                            : "bg-blue-600 hover:bg-blue-700"
-                        }`}
-                      >
-                        {pdfLoading === inv.id ? "Loading..." : "View PDF"}
-                      </button>
-
-                      <button
-                        onClick={() => handleDelete(inv.id)}
-                        disabled={deleteLoading === inv.id}
-                        className={`px-4 py-2 text-white rounded text-sm ${
-                          deleteLoading === inv.id
-                            ? "bg-gray-400 cursor-not-allowed"
-                            : "bg-red-600 hover:bg-red-700"
-                        }`}
-                      >
-                        {deleteLoading === inv.id ? "Deleting..." : "Delete"}
-                      </button>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+    <>
+      <PageHeader
+        title="Invoices"
+        subtitle="Every sale. Click a column title to sort; newest first by default."
+        actions={<Link href="/sell"><Button>New sale</Button></Link>}
+      />
+      <Panel padded={false}>
+        <div className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-5">
+          <Field label="Search"><Input placeholder="Invoice # or customer" value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} /></Field>
+          <Field label="Show">
+            <Select value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }}>
+              <option value="">All invoices</option>
+              <option value="UNPAID">Not fully paid</option>
+              <option value="OVERDUE">Past due</option>
+              <option value="PAID">Paid</option>
+              <option value="VOID">Void</option>
+            </Select>
+          </Field>
+          <Field label="From"><Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></Field>
+          <Field label="To"><Input type="date" value={to} onChange={(e) => setTo(e.target.value)} /></Field>
         </div>
-      </main>
-    </div>
+        <ErrorNote>{error}</ErrorNote>
+        {loading && !data ? (
+          <Loading />
+        ) : !data?.items.length ? (
+          <Empty>No invoices match.</Empty>
+        ) : (
+          <>
+            <Table>
+              <thead>
+                <tr>
+                  <Th sortKey="invoiceNo" sort={sort}>Invoice</Th>
+                  <Th sortKey="issueDate" sort={sort}>Date</Th>
+                  <Th>Customer</Th>
+                  <Th sortKey="dueDate" sort={sort}>Due</Th>
+                  <Th sortKey="total" sort={sort} className="text-right">Total</Th>
+                  <Th className="text-right">Balance</Th>
+                  <Th>Status</Th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.items.map((inv) => (
+                  <tr key={inv.id} className="hover:bg-linen/60">
+                    <Td><Link href={`/invoices/${inv.id}`} className="font-semibold text-walnut underline">{inv.invoiceNo}</Link></Td>
+                    <Td>{date(inv.issueDate)}</Td>
+                    <Td>
+                      {inv.customer ? <Link className="hover:underline" href={`/customers/${inv.customer.id}`}>{inv.customer.name}</Link> : firstLine(inv.billTo) || "Walk-in"}
+                    </Td>
+                    <Td>{inv.termsDays === 0 ? "On receipt" : date(inv.dueDate)}</Td>
+                    <Td className="num">{money(inv.total)}</Td>
+                    <Td className="num font-medium">{money(inv.balance)}</Td>
+                    <Td><InvoiceStatus inv={inv} /></Td>
+                  </tr>
+                ))}
+              </tbody>
+            </Table>
+            <div className="flex items-center justify-between p-4 text-sm text-oak">
+              <span>{data.total} invoices</span>
+              <div className="flex gap-2">
+                <Button size="sm" variant="secondary" disabled={page === 1} onClick={() => setPage(page - 1)}>Previous</Button>
+                <Button size="sm" variant="secondary" disabled={page * 100 >= data.total} onClick={() => setPage(page + 1)}>Next</Button>
+              </div>
+            </div>
+          </>
+        )}
+      </Panel>
+    </>
   );
 }

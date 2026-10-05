@@ -1,49 +1,60 @@
 "use client";
-
-import { useState } from "react";
-import { api, setToken } from "@/lib/api";
+import Image from "next/image";
+import { useEffect, useState } from "react";
+import { api, session } from "@/lib/api";
+import { useSession } from "@/lib/session";
+import { Button, ErrorNote, Field, Input, Select } from "@/components/ui";
 
 export default function LoginPage() {
+  const { stores } = useSession();
   const [email, setEmail] = useState("");
-  const [pw, setPw] = useState("");
+  const [password, setPassword] = useState("");
+  const [store, setStore] = useState("A");
+  useEffect(() => setStore(session.store), []);
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
 
-  async function login() {
-    const res = await api("/auth/login", {
-      method: "POST",
-      body: JSON.stringify({ email, password: pw }),
-    });
-
-    setToken(res.token);
-    window.location.href = "/products";
+  async function login(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setError("");
+    try {
+      const res = await api<{ token: string }>("/auth/login", { body: { email, password }, store });
+      session.save(res.token, store);
+      window.location.href = "/";
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (
-    <div className="flex h-screen items-center justify-center bg-zinc-100">
-      <div className="bg-white p-8 rounded-xl shadow w-96">
-        <h1 className="text-xl font-semibold mb-4">Login</h1>
-
-        <input
-          className="border p-2 w-full mb-3"
-          placeholder="Email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-        />
-
-        <input
-          className="border p-2 w-full mb-3"
-          placeholder="Password"
-          type="password"
-          value={pw}
-          onChange={(e) => setPw(e.target.value)}
-        />
-
-        <button
-          onClick={login}
-          className="w-full bg-black text-white p-2 rounded"
-        >
-          Login
-        </button>
-      </div>
+    <div className="flex min-h-screen items-center justify-center bg-walnut p-4">
+      <form onSubmit={login} className="w-full max-w-sm overflow-hidden rounded-xl bg-white shadow-2xl">
+        <Image src="/Champion.png" alt="Champion Point of Sale" width={448} height={381} className="h-auto w-full" priority />
+        <div className="space-y-4 p-6">
+          <Field label="Store">
+            <Select value={store} onChange={(e) => setStore(e.target.value)}>
+              {(stores.length ? stores : [{ id: "A", name: "Store A" }]).map((s) => (
+                <option key={s.id} value={s.id}>
+                  Store {s.id} — {s.name}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="Email">
+            <Input type="email" autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} required />
+          </Field>
+          <Field label="Password">
+            <Input type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required />
+          </Field>
+          <ErrorNote>{error}</ErrorNote>
+          <Button type="submit" className="w-full" busy={busy}>
+            Log in
+          </Button>
+        </div>
+      </form>
     </div>
   );
 }
