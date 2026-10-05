@@ -32,28 +32,39 @@ export function ProductSearch({
   const [q, setQ] = useState("");
   const [open, setOpen] = useState(false);
   const [results, setResults] = useState<Product[]>([]);
+  const [loaded, setLoaded] = useState<string | null>(null); // the query the results belong to
+  const [failed, setFailed] = useState("");
   const [active, setActive] = useState(0);
   const debounced = useDebounced(q);
   const ref = useOutsideClose(() => setOpen(false));
   const { show: showLevels } = usePriceLevels();
 
+  // With nothing typed, the list shows the first items so the catalog can be browsed.
   useEffect(() => {
-    if (!debounced.trim()) return setResults([]);
+    if (!open) return;
     let cancelled = false;
-    api<{ items: Product[] }>(`/products?q=${encodeURIComponent(debounced)}&limit=12`)
-      .then((r) => !cancelled && (setResults(r.items), setActive(0)))
-      .catch(() => {});
+    const term = debounced.trim();
+    api<{ items: Product[] }>(`/products?${new URLSearchParams({ q: term, limit: "15", sort: "itemCode", dir: "asc" })}`)
+      .then((r) => {
+        if (cancelled) return;
+        setResults(r.items);
+        setActive(0);
+        setLoaded(term);
+        setFailed("");
+      })
+      .catch((e) => !cancelled && setFailed(e instanceof Error ? e.message : String(e)));
     return () => {
       cancelled = true;
     };
-  }, [debounced]);
+  }, [debounced, open]);
 
   const pick = (p: Product) => {
     onPick(p);
     setQ("");
-    setResults([]);
     setOpen(false);
   };
+  const term = q.trim();
+  const waiting = loaded === null || loaded !== debounced.trim();
 
   return (
     <div ref={ref} className="relative">
@@ -65,38 +76,56 @@ export function ProductSearch({
           setQ(e.target.value);
           setOpen(true);
         }}
-        onFocus={() => setOpen(true)}
+        onClick={() => setOpen(true)}
         onKeyDown={(e) => {
+          if (e.key === "Escape") setOpen(false);
+          if (e.key === "ArrowDown") setOpen(true);
           if (e.key === "ArrowDown") setActive((a) => Math.min(a + 1, results.length - 1));
           if (e.key === "ArrowUp") setActive((a) => Math.max(a - 1, 0));
-          if (e.key === "Enter" && results[active]) {
+          if (e.key === "Enter" && results[active] && !waiting) {
             e.preventDefault();
             pick(results[active]);
           }
         }}
         aria-label="Search items"
       />
-      {open && results.length > 0 && (
-        <ul className="absolute z-30 mt-1 max-h-80 w-full overflow-auto rounded-lux border py-1 border-hairline bg-white shadow-lg">
-          {results.map((p, i) => (
-            <li key={p.id}>
-              <button
-                type="button"
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => pick(p)}
-                className={`flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm ${i === active ? "bg-linen" : ""}`}
-              >
-                <span>
-                  <span className="font-semibold text-walnut">{p.itemCode}</span>{" "}
-                  <span className="text-ink">{p.name}</span>
-                </span>
-                <span className="num text-oak">
-                  {qty(p.qtyOnHand)} on hand{showLevels && ` · cost ${money(p.unitCost)}`}
-                </span>
-              </button>
-            </li>
-          ))}
-        </ul>
+      {open && (
+        <div className="absolute z-30 mt-1 max-h-96 w-full overflow-auto rounded-lux border border-hairline bg-white py-1 shadow-lg">
+          {failed ? (
+            <p className="px-4 py-3 text-sm text-late">Couldn&apos;t load items: {failed}</p>
+          ) : results.length === 0 ? (
+            <p className="px-4 py-3 text-sm text-oak">
+              {waiting
+                ? "Searching…"
+                : loaded
+                  ? <>No items match &ldquo;{term}&rdquo;. Try part of the code (e.g. W3030) or the name, or add a custom line.</>
+                  : <>There are no items in this store yet. Add them, or import the price list, on <b>Items &amp; stock</b>.</>}
+            </p>
+          ) : (
+            <ul>
+              {!term && <li className="px-4 pb-1 pt-2 text-xs font-semibold uppercase tracking-wide text-oak">Items — type to search</li>}
+              {results.map((p, i) => (
+                <li key={p.id}>
+                  <button
+                    type="button"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onMouseEnter={() => setActive(i)}
+                    onClick={() => pick(p)}
+                    className={`flex w-full items-center justify-between gap-3 px-4 py-2 text-left text-sm ${i === active ? "bg-linen" : ""}`}
+                  >
+                    <span>
+                      <span className="font-semibold text-walnut">{p.itemCode}</span>{" "}
+                      <span className="text-ink">{p.name}</span>
+                    </span>
+                    <span className="num text-oak">
+                      {qty(p.qtyOnHand)} on hand{showLevels && ` · cost ${money(p.unitCost)}`}
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       )}
     </div>
   );

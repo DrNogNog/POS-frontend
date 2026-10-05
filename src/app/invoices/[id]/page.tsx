@@ -1,7 +1,7 @@
 "use client";
 // One invoice: lines, payments, fees, and every action on it.
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useState } from "react";
 import { api, openPdf } from "@/lib/api";
 import { useApi } from "@/lib/hooks";
@@ -18,6 +18,7 @@ type Dialog = null | "pay" | "fee" | "collections" | "writeoff" | "void" | "due"
 
 export default function InvoicePage() {
   const { id } = useParams<{ id: string }>();
+  const router = useRouter();
   const { can } = useSession();
   const { data: inv, error, reload } = useApi<Invoice>(`/invoices/${id}`);
   const [dialog, setDialog] = useState<Dialog>(null);
@@ -46,16 +47,24 @@ export default function InvoicePage() {
     }
   };
   const profit = n(inv.subtotal) - n(inv.discountAmount) - n(inv.cogsTotal);
+  // Go back to wherever the invoice was opened from (keeps the list's filters);
+  // opened directly from a link → the invoices list.
+  const goBack = () => (window.history.length > 1 ? router.back() : router.push("/invoices"));
 
   return (
     <>
       <PageHeader
         title={`Invoice ${inv.invoiceNo}`}
+        back={{ label: "Back", onClick: goBack }}
         subtitle={
           <>
             {date(inv.issueDate)} · {termsLabel(inv.termsDays)}
             {inv.termsDays > 0 && ` · due ${date(inv.dueDate)}`}
-            {inv.estimate && <> · from estimate {inv.estimate.estimateNo}</>}
+            {inv.estimate ? (
+              <> · approved from estimate <Link className="underline" href={`/estimates?open=${inv.estimate.id}`}>{inv.estimate.estimateNo}</Link></>
+            ) : (
+              <> · direct sale (no approval needed)</>
+            )}
           </>
         }
         actions={

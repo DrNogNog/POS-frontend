@@ -206,7 +206,7 @@ export interface Invoice {
   lines?: DocLine[];
   payments?: Payment[];
   adjustments?: { id: number; type: string; amount: Money; note: string; createdAt: string; createdBy: string }[];
-  estimate?: { id: number; estimateNo: string } | null;
+  estimate?: { id: number; estimateNo: string; approvedAt?: string | null } | null;
   bucket?: string;
 }
 

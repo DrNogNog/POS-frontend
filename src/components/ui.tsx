@@ -121,14 +121,26 @@ export function PageHeader({
   title,
   subtitle,
   actions,
+  back,
 }: {
   title: string;
   subtitle?: ReactNode;
   actions?: ReactNode;
+  /** Shows a "← Back" link above the title (e.g. back to the list). */
+  back?: { label: string; onClick: () => void };
 }) {
   return (
     <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
       <div>
+        {back && (
+          <button
+            type="button"
+            onClick={back.onClick}
+            className="no-print mb-2 inline-flex items-center gap-1.5 rounded-lux px-2 py-1 -ml-2 text-sm font-semibold text-oak hover:bg-hairline/60 hover:text-walnut"
+          >
+            <span aria-hidden>←</span> {back.label}
+          </button>
+        )}
         <h1 className="font-display text-4xl font-semibold leading-tight text-walnut">{title}</h1>
         {subtitle && <p className="mt-1 max-w-3xl text-oak">{subtitle}</p>}
       </div>
@@ -185,7 +197,15 @@ export function Stat({
   );
 }
 
-export function Badge({ tone = "neutral", children }: { tone?: "neutral" | "paid" | "due" | "late" | "info"; children: ReactNode }) {
+export function Badge({
+  tone = "neutral",
+  title,
+  children,
+}: {
+  tone?: "neutral" | "paid" | "due" | "late" | "info";
+  title?: string;
+  children: ReactNode;
+}) {
   const styles = {
     neutral: "bg-linen text-walnut border-hairline",
     paid: "bg-paid/10 text-paid border-paid/30",
@@ -194,7 +214,7 @@ export function Badge({ tone = "neutral", children }: { tone?: "neutral" | "paid
     info: "bg-walnut text-white border-walnut",
   }[tone];
   return (
-    <span className={cn("inline-flex items-center whitespace-nowrap rounded-full border px-2 py-0.5 text-xs font-medium", styles)}>
+    <span title={title} className={cn("inline-flex items-center whitespace-nowrap rounded-full border px-2 py-0.5 text-xs font-medium", styles)}>
       {children}
     </span>
   );

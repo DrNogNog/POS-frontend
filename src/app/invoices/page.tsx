@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { useApi, useDebounced, useQueryParam, useSort } from "@/lib/hooks";
 import { date, firstLine, money } from "@/lib/format";
 import type { Invoice } from "@/lib/types";
-import { Button, Empty, ErrorNote, Field, Input, Loading, PageHeader, Panel, Select, Table, Td, Th } from "@/components/ui";
+import { Badge, Button, Empty, ErrorNote, Field, Input, Loading, PageHeader, Panel, Select, Table, Td, Th } from "@/components/ui";
 import { InvoiceStatus } from "@/components/status";
 
 export default function InvoicesPage() {
@@ -15,6 +15,7 @@ export default function InvoicesPage() {
   useEffect(() => {
     if (statusParam) setStatus(statusParam);
   }, [statusParam]);
+  const [approval, setApproval] = useState(""); // "" | needed | none
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [page, setPage] = useState(1);
@@ -26,6 +27,7 @@ export default function InvoicesPage() {
     params.set("status", "UNPAID");
     params.set("overdue", "true");
   } else if (status) params.set("status", status);
+  if (approval) params.set("approval", approval);
   if (from) params.set("from", from);
   if (to) params.set("to", to);
   const { data, error, loading } = useApi<{ items: Invoice[]; total: number }>(`/invoices?${params}`);
@@ -38,7 +40,7 @@ export default function InvoicesPage() {
         actions={<Link href="/sell"><Button>New sale</Button></Link>}
       />
       <Panel padded={false}>
-        <div className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-5">
+        <div className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
           <Field label="Search"><Input placeholder="Invoice # or customer" value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} /></Field>
           <Field label="Show">
             <Select value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }}>
@@ -47,6 +49,13 @@ export default function InvoicesPage() {
               <option value="OVERDUE">Past due</option>
               <option value="PAID">Paid</option>
               <option value="VOID">Void</option>
+            </Select>
+          </Field>
+          <Field label="Approval">
+            <Select value={approval} onChange={(e) => { setApproval(e.target.value); setPage(1); }}>
+              <option value="">With or without</option>
+              <option value="needed">Needed approval (from an estimate)</option>
+              <option value="none">No approval (direct sale)</option>
             </Select>
           </Field>
           <Field label="From"><Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></Field>
@@ -65,6 +74,7 @@ export default function InvoicesPage() {
                   <Th sortKey="invoiceNo" sort={sort}>Invoice</Th>
                   <Th sortKey="issueDate" sort={sort}>Date</Th>
                   <Th>Customer</Th>
+                  <Th>Approval</Th>
                   <Th sortKey="dueDate" sort={sort}>Due</Th>
                   <Th sortKey="total" sort={sort} className="text-right">Total</Th>
                   <Th className="text-right">Balance</Th>
@@ -77,7 +87,16 @@ export default function InvoicesPage() {
                     <Td><Link href={`/invoices/${inv.id}`} className="font-semibold text-walnut underline">{inv.invoiceNo}</Link></Td>
                     <Td>{date(inv.issueDate)}</Td>
                     <Td>
-                      {inv.customer ? <Link className="hover:underline" href={`/customers/${inv.customer.id}`}>{inv.customer.name}</Link> : firstLine(inv.billTo) || "Walk-in"}
+                      {inv.customer ? <Link className="hover:underline" href={`/customers/${inv.customer.id}`}>{inv.customer.name}</Link> : firstLine(inv.billTo) || "—"}
+                    </Td>
+                    <Td>
+                      {inv.estimate ? (
+                        <Badge tone="paid" title={inv.estimate.approvedAt ? `Approved ${date(inv.estimate.approvedAt)}` : undefined}>
+                          Approved · {inv.estimate.estimateNo}
+                        </Badge>
+                      ) : (
+                        <Badge>Not needed</Badge>
+                      )}
                     </Td>
                     <Td>{inv.termsDays === 0 ? "On receipt" : date(inv.dueDate)}</Td>
                     <Td className="num">{money(inv.total)}</Td>
