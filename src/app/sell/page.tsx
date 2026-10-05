@@ -19,6 +19,16 @@ import { Private, usePriceLevels } from "@/lib/privacy";
 import { useSession } from "@/lib/session";
 import { money, n, qty, termsLabel } from "@/lib/format";
 import type { Customer, Estimate, Invoice, Product } from "@/lib/types";
+
+/** From /products/availability: on hand, promised on estimates, and what's left. */
+interface Availability {
+  productId: number;
+  itemCode: string;
+  onHand: number;
+  approved: number;
+  pending: number;
+  available: number;
+}
 import { Badge, Button, Checkbox, Field, Input, PageHeader, Panel, Select, Table, Td, Textarea, Th, useAction } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { CustomerSearch, ProductSearch } from "@/components/pickers";
@@ -60,6 +70,7 @@ interface Draft {
   payMethod: string;
   payRef: string;
   allowBackorder: boolean;
+  saveAnyway?: boolean;
 }
 const draftKey = (storeId: string) => `pos.saleDraft.${storeId}`;
 function readDraft(storeId: string): Draft | null {
@@ -109,6 +120,7 @@ export default function SellPage() {
   const [payMethod, setPayMethod] = useState("CASH");
   const [payRef, setPayRef] = useState("");
   const [allowBackorder, setAllowBackorder] = useState(false);
+  const [saveAnyway, setSaveAnyway] = useState(false);
 
   // ---- Keep the sale in progress when leaving the screen ----
   const [draftStore, setDraftStore] = useState<string | null>(null); // store whose draft is loaded
@@ -132,6 +144,7 @@ export default function SellPage() {
     setPayMethod(d?.payMethod ?? "CASH");
     setPayRef(d?.payRef ?? "");
     setAllowBackorder(d?.allowBackorder ?? false);
+    setSaveAnyway(d?.saveAnyway ?? false);
   }
   useEffect(() => {
     if (!store) return;
@@ -143,7 +156,7 @@ export default function SellPage() {
   }, [store?.id]);
   const draft: Draft = {
     customer, lines, tier, discountMode, discountInput, taxRateId, billTo, shipTo, fulfillment, notes,
-    termsDays, payNow, payAmount, payMethod, payRef, allowBackorder,
+    termsDays, payNow, payAmount, payMethod, payRef, allowBackorder, saveAnyway,
   };
   const draftJson = JSON.stringify(draft);
   useEffect(() => {
@@ -306,7 +319,35 @@ export default function SellPage() {
   }, [lines, discountMode, discountInput, taxRate]);
   const paying = payNow ? (payAmount.trim() === "" ? totals.total : round2(n(payAmount))) : 0;
   const payTooMuch = payNow && paying > totals.total + 0.004;
-  const short = lines.filter((l) => l.productId && l.onHand !== null && n(l.qty) > l.onHand);
+  // Stock already promised on other estimates (Approvals) counts as taken
+  const productIds = [...new Set(lines.map((l) => l.productId).filter((x): x is number => !!x))].sort((a, b) => a - b);
+  const idsKey = productIds.join(",");
+  const [avail, setAvail] = useState<Record<number, Availability>>({});
+  useEffect(() => {
+    if (!idsKey) return setAvail({});
+    let cancelled = false;
+    const params = new URLSearchParams({ ids: idsKey });
+    if (editingEstimate) params.set("excludeEstimate", String(editingEstimate.id));
+    api<Availability[]>(`/products/availability?${params}`)
+      .then((rows) => !cancelled && setAvail(Object.fromEntries(rows.map((r) => [r.productId, r]))))
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [idsKey, editingEstimate]);
+  const needed = new Map<number, number>();
+  for (const l of lines) if (l.productId) needed.set(l.productId, (needed.get(l.productId) ?? 0) + n(l.qty));
+  const short = [...needed.entries()]
+    .map(([productId, need]) => ({ productId, need, a: avail[productId] }))
+    .filter((x) => x.a && x.need > x.a.available)
+    .map((x) => ({
+      productId: x.productId,
+      itemCode: x.a.itemCode,
+      needed: x.need,
+      onHand: x.a.onHand,
+      promised: x.a.approved + x.a.pending,
+      available: x.a.available,
+    }));
 
   function body() {
     return {
@@ -316,6 +357,7 @@ export default function SellPage() {
       fulfillment,
       priceTierCode: tier,
       discountAmount: totals.discount,
+      allowShortage: saveAnyway,
       taxRatePct: taxRate,
       notes,
       lines: lines
@@ -445,9 +487,17 @@ export default function SellPage() {
                       </Td>
                       <Td>
                         <Input className="h-9" value={l.description} onChange={(e) => update(l.key, { description: e.target.value })} />
-                        {l.productId && l.onHand !== null && (
-                          <div className={`mt-1 text-xs ${n(l.qty) > l.onHand ? "text-late" : "text-oak"}`}>
-                            {qty(l.onHand)} on hand
+                        {l.productId && (avail[l.productId] || l.onHand !== null) && (
+                          <div className={`mt-1 text-xs ${short.some((x) => x.productId === l.productId) ? "text-late" : "text-oak"}`}>
+                            {avail[l.productId] ? (
+                              <>
+                                {qty(avail[l.productId].onHand)} on hand
+                                {avail[l.productId].approved + avail[l.productId].pending > 0 &&
+                                  ` · ${qty(avail[l.productId].approved + avail[l.productId].pending)} promised · ${qty(Math.max(0, avail[l.productId].available))} available`}
+                              </>
+                            ) : (
+                              <>{qty(l.onHand!)} on hand</>
+                            )}
                             {showLevels && l.unitCost > 0 && ` · cost ${money(l.unitCost)}`}
                             {showLevels && margin !== null && ` · margin ${margin.toFixed(0)}%`}
                           </div>
@@ -555,69 +605,87 @@ export default function SellPage() {
             </dl>
           </Panel>
 
-          <Panel title="Save as estimate">
-            <p className="mb-3 text-sm text-oak">Send the customer a quote. Approve it later on the Approvals screen to turn it into an invoice.</p>
-            <Button variant="secondary" className="w-full" onClick={saveEstimate} busy={busy} disabled={!canSave}>
-              {editingEstimate ? "Save changes to estimate" : "Save estimate"}
-            </Button>
-            {whyNot && <p className="mt-2 text-sm text-oak">{whyNot}</p>}
-          </Panel>
-
-          {!editingEstimate && (
-            <Panel title="Invoice now">
-              <div className="space-y-4">
-                <Field label="Payment terms">
-                  <Select value={termsDays} onChange={(e) => { const d = Number(e.target.value); setTermsDays(d); setPayNow(d === 0); setPayAmount(""); }}>
-                    <option value={0}>Pay now</option>
-                    <option value={30}>Net 30 (on account)</option>
-                    <option value={60}>Net 60 (on account)</option>
-                    <option value={90}>Net 90 (on account)</option>
-                  </Select>
-                </Field>
-                <Checkbox label="Partial payment now" checked={payNow} onChange={setPayNow} />
-                {payNow && (
-                  <div className="space-y-3">
-                    <Field label="Amount paid now" hint={`Leave empty for the full ${money(totals.total)}. Anything less stays on the customer's account.`}>
-                      <Input
-                        className="num text-left"
-                        type="number"
-                        min={0}
-                        step="0.01"
-                        placeholder={totals.total.toFixed(2)}
-                        value={payAmount}
-                        onChange={(e) => setPayAmount(e.target.value)}
-                      />
-                    </Field>
-                    {payTooMuch && <p className="text-sm text-late">That&apos;s more than the total of {money(totals.total)}.</p>}
-                    {!payTooMuch && paying < totals.total && (
-                      <p className="text-sm text-oak">
-                        Paying <span className="num">{money(paying)}</span> now · <span className="num">{money(totals.total - paying)}</span> left to pay
-                      </p>
-                    )}
-                  <div className="grid grid-cols-2 gap-3">
-                    <Select value={payMethod} onChange={(e) => setPayMethod(e.target.value)} aria-label="Payment method">
-                      <option value="CASH">Cash</option>
-                      <option value="CREDIT">Credit card</option>
-                      <option value="DEBIT">Debit card</option>
-                      <option value="CHECK">Check</option>
+          <Panel title={editingEstimate ? "Save the estimate" : "Finish"}>
+            <div className="space-y-4">
+              {!editingEstimate && (
+                <>
+                  <p className="text-sm text-oak">
+                    <b className="text-walnut">Estimate</b> — a quote the customer approves later on the Approvals screen.{" "}
+                    <b className="text-walnut">Invoice</b> — the sale is made now and the items leave stock.
+                  </p>
+                  <Field label="Payment terms (for an invoice)">
+                    <Select value={termsDays} onChange={(e) => { const d = Number(e.target.value); setTermsDays(d); setPayNow(d === 0); setPayAmount(""); }}>
+                      <option value={0}>Pay now</option>
+                      <option value={30}>Net 30 (on account)</option>
+                      <option value={60}>Net 60 (on account)</option>
+                      <option value={90}>Net 90 (on account)</option>
                     </Select>
-                    <Input placeholder="Reference" value={payRef} onChange={(e) => setPayRef(e.target.value)} />
+                  </Field>
+                  <Checkbox label="Partial payment now" checked={payNow} onChange={setPayNow} />
+                  {payNow && (
+                    <div className="space-y-3">
+                      <Field label="Amount paid now" hint={`Leave empty for the full ${money(totals.total)}. Anything less stays on the customer's account.`}>
+                        <Input
+                          className="num text-left"
+                          type="number"
+                          min={0}
+                          step="0.01"
+                          placeholder={totals.total.toFixed(2)}
+                          value={payAmount}
+                          onChange={(e) => setPayAmount(e.target.value)}
+                        />
+                      </Field>
+                      {payTooMuch && <p className="text-sm text-late">That&apos;s more than the total of {money(totals.total)}.</p>}
+                      {!payTooMuch && paying < totals.total && (
+                        <p className="text-sm text-oak">
+                          Paying <span className="num">{money(paying)}</span> now · <span className="num">{money(totals.total - paying)}</span> left to pay
+                        </p>
+                      )}
+                      <div className="grid grid-cols-2 gap-3">
+                        <Select value={payMethod} onChange={(e) => setPayMethod(e.target.value)} aria-label="Payment method">
+                          <option value="CASH">Cash</option>
+                          <option value="CREDIT">Credit card</option>
+                          <option value="DEBIT">Debit card</option>
+                          <option value="CHECK">Check</option>
+                        </Select>
+                        <Input placeholder="Reference" value={payRef} onChange={(e) => setPayRef(e.target.value)} />
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+
+              {short.length > 0 && (
+                <div className="rounded-lux border border-late/20 bg-late/5 px-4 py-3 text-sm">
+                  <div className="font-semibold text-late">Not enough stock available</div>
+                  <ul className="mt-1 space-y-0.5 text-late">
+                    {short.map((x) => (
+                      <li key={x.productId}>
+                        <b>{x.itemCode}</b>: {qty(x.needed)} needed, {qty(Math.max(0, x.available))} available
+                        {x.promised > 0 && <span className="text-oak"> ({qty(x.onHand)} on hand, {qty(x.promised)} already promised)</span>}
+                      </li>
+                    ))}
+                  </ul>
+                  <div className="mt-3 space-y-2">
+                    <Checkbox label="Save estimate anyway" checked={saveAnyway} onChange={setSaveAnyway} />
+                    {!editingEstimate && <Checkbox label="Special order — sell anyway" checked={allowBackorder} onChange={setAllowBackorder} />}
                   </div>
-                  </div>
-                )}
-                {short.length > 0 && (
-                  <div className="rounded-lux bg-late/5 px-4 py-3 text-sm text-late">
-                    Not enough stock for {short.map((l) => l.itemCode).join(", ")}.
-                    <div className="mt-2"><Checkbox label="Special order — sell anyway" checked={allowBackorder} onChange={setAllowBackorder} /></div>
-                  </div>
-                )}
-                <Button className="w-full" onClick={invoiceNow} busy={busy} disabled={!canSave || payTooMuch || (short.length > 0 && !allowBackorder)}>
-                  Create invoice
+                </div>
+              )}
+
+              <div className="flex flex-col gap-2 pt-1">
+                <Button variant="secondary" className="w-full" onClick={saveEstimate} busy={busy} disabled={!canSave || (short.length > 0 && !saveAnyway)}>
+                  {editingEstimate ? "Save changes to estimate" : "Save estimate"}
                 </Button>
-                {whyNot && <p className="text-sm text-oak">{whyNot}</p>}
+                {!editingEstimate && (
+                  <Button className="w-full" onClick={invoiceNow} busy={busy} disabled={!canSave || payTooMuch || (short.length > 0 && !allowBackorder)}>
+                    Create invoice
+                  </Button>
+                )}
               </div>
-            </Panel>
-          )}
+              {whyNot && <p className="text-sm text-oak">{whyNot}</p>}
+            </div>
+          </Panel>
         </div>
       </div>
 

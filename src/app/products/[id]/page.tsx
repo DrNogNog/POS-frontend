@@ -3,10 +3,10 @@
 // (for FIFO/LIFO), weighted average cost and every stock movement.
 import Link from "next/link";
 import Image from "next/image";
-import { useParams } from "next/navigation";
-import { useState } from "react";
+import { useParams, useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 import { api, imageUrl } from "@/lib/api";
-import { useApi } from "@/lib/hooks";
+import { useApi, useQueryParam } from "@/lib/hooks";
 import { useSession } from "@/lib/session";
 import { Private, usePriceLevels } from "@/lib/privacy";
 import { date, dateTime, money, n, pct, qty } from "@/lib/format";
@@ -34,13 +34,21 @@ const MOVE_LABEL: Record<string, string> = {
 
 export default function ProductPage() {
   const { id } = useParams<{ id: string }>();
+  const router = useRouter();
   const { can } = useSession();
   const { show: showLevels } = usePriceLevels();
   const { data: p, error, reload } = useApi<Detail>(`/products/${id}`);
   const [editing, setEditing] = useState(false);
   const [adjusting, setAdjusting] = useState(false);
-  const [adj, setAdj] = useState({ qtyChange: "", unitCost: "", reason: "" });
+  const [adj, setAdj] = useState({ qtyChange: "", unitCost: "", reason: "", costUpdate: "average" as "average" | "replace" | "keep" });
   const { busy, run } = useAction();
+  // Opened from the list with ?adjust=1 or ?edit=1
+  const adjustParam = useQueryParam("adjust");
+  const editParam = useQueryParam("edit");
+  useEffect(() => {
+    if (adjustParam) setAdjusting(true);
+    if (editParam) setEditing(true);
+  }, [adjustParam, editParam]);
 
   if (error) return <ErrorNote>{error}</ErrorNote>;
   if (!p) return <Loading />;
@@ -49,13 +57,18 @@ export default function ProductPage() {
     const ok = await run(
       () =>
         api(`/products/${id}/adjust`, {
-          body: { qtyChange: Number(adj.qtyChange), unitCost: adj.unitCost ? Number(adj.unitCost) : undefined, reason: adj.reason },
+          body: {
+            qtyChange: Number(adj.qtyChange),
+            unitCost: adj.unitCost ? Number(adj.unitCost) : undefined,
+            reason: adj.reason,
+            costUpdate: adj.costUpdate,
+          },
         }),
       "Stock updated"
     );
     if (ok) {
       setAdjusting(false);
-      setAdj({ qtyChange: "", unitCost: "", reason: "" });
+      setAdj({ qtyChange: "", unitCost: "", reason: "", costUpdate: "average" });
       await reload();
     }
   }
@@ -64,6 +77,7 @@ export default function ProductPage() {
     <>
       <PageHeader
         title={`${p.itemCode} — ${p.name}`}
+        back={{ label: "Back", onClick: () => (window.history.length > 1 ? router.back() : router.push("/products")) }}
         subtitle={[p.category?.name, p.collection, p.supplier && `from ${p.supplier.name}`].filter(Boolean).join(" · ")}
         actions={
           can("MANAGER") && (
@@ -109,8 +123,13 @@ export default function ProductPage() {
         </Private>
       </div>
 
-      {p.images.length > 0 && (
-        <Panel title="Photos" className="mt-6">
+      {(p.images.length > 0 || can("MANAGER")) && (
+        <Panel
+          title={`Photos${p.images.length ? ` (${p.images.length})` : ""}`}
+          className="mt-6"
+          actions={can("MANAGER") && <Button size="sm" variant="secondary" onClick={() => setEditing(true)}>{p.images.length ? "Add or remove photos" : "Add photos"}</Button>}
+        >
+          {p.images.length === 0 && <p className="text-oak">No photos yet.</p>}
           <div className="flex flex-wrap gap-3">
             {p.images.map((img) => (
               <a key={img} href={imageUrl(img)} target="_blank" rel="noreferrer">
@@ -182,6 +201,31 @@ export default function ProductPage() {
           <Field label="Unit cost (when adding)" hint={`Default ${money(p.unitCost)}`}><Input type="number" step="0.01" min={0} value={adj.unitCost} onChange={(e) => setAdj({ ...adj, unitCost: e.target.value })} /></Field>
           <Field label="Reason" className="sm:col-span-2"><Input value={adj.reason} onChange={(e) => setAdj({ ...adj, reason: e.target.value })} placeholder="Opening count, damaged in delivery…" /></Field>
         </div>
+        {Number(adj.qtyChange) > 0 && (
+          <fieldset className="mt-4">
+            <legend className="mb-2 text-sm font-semibold text-walnut">What happens to the item&apos;s cost ({money(p.unitCost)})?</legend>
+            <div className="space-y-2 text-sm">
+              {(
+                [
+                  ["average", "Average it in", (() => {
+                    const have = Math.max(0, n(p.qtyOnHand));
+                    const add = Number(adj.qtyChange);
+                    const c = adj.unitCost ? Number(adj.unitCost) : n(p.unitCost);
+                    const avg = have + add > 0 && n(p.unitCost) > 0 && have > 0 ? (have * n(p.unitCost) + add * c) / (have + add) : c;
+                    return `New cost ${money(avg)} — the weighted average of ${qty(have)} on hand and ${add} added`;
+                  })()],
+                  ["replace", "Use the new unit cost", `New cost ${money(adj.unitCost || p.unitCost)}`],
+                  ["keep", "Keep the cost as it is", `Stays ${money(p.unitCost)}`],
+                ] as const
+              ).map(([value, label, note]) => (
+                <label key={value} className="flex cursor-pointer items-start gap-2">
+                  <input type="radio" name="costUpdate" className="mt-1 accent-walnut" checked={adj.costUpdate === value} onChange={() => setAdj({ ...adj, costUpdate: value })} />
+                  <span><b className="text-walnut">{label}</b> <span className="text-oak">· {note}</span></span>
+                </label>
+              ))}
+            </div>
+          </fieldset>
+        )}
       </Modal>
     </>
   );

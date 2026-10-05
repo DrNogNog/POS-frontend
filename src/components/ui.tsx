@@ -297,13 +297,20 @@ export function Modal({
   wide?: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
+  // Keep the latest onClose without re-running the effect on every keystroke
+  // (re-running it used to move the cursor out of the field being typed in).
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
   useEffect(() => {
     if (!open) return;
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && closeRef.current();
     window.addEventListener("keydown", onKey);
-    ref.current?.querySelector<HTMLElement>("input,select,textarea,button")?.focus();
+    // Put the cursor in the first field once, when the dialog opens
+    const body = ref.current?.querySelector("[data-modal-body]");
+    (body?.querySelector<HTMLElement>("input:not([type=hidden]),select,textarea") ??
+      ref.current?.querySelector<HTMLElement>("[data-modal-body] button, [data-modal-footer] button"))?.focus();
     return () => window.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
+  }, [open]);
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-walnut-deep/55 p-4 backdrop-blur-sm sm:p-10" onMouseDown={onClose}>
@@ -321,8 +328,8 @@ export function Modal({
             <X size={18} />
           </button>
         </div>
-        <div className="p-6">{children}</div>
-        {footer && <div className="flex flex-wrap justify-end gap-2 border-t border-hairline px-6 py-4">{footer}</div>}
+        <div className="p-6" data-modal-body>{children}</div>
+        {footer && <div className="flex flex-wrap justify-end gap-2 border-t border-hairline px-6 py-4" data-modal-footer>{footer}</div>}
       </div>
     </div>
   );

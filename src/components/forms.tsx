@@ -2,7 +2,8 @@
 // Create / edit dialogs for customers, suppliers and items, plus the
 // "record payment" dialog used for both customer invoices and supplier bills.
 import { useEffect, useState } from "react";
-import { api } from "@/lib/api";
+import { ImagePlus, X } from "lucide-react";
+import { api, imageUrl } from "@/lib/api";
 import { useSession } from "@/lib/session";
 import { usePriceLevels } from "@/lib/privacy";
 import { isoDay, money, n } from "@/lib/format";
@@ -289,6 +290,7 @@ export function ProductForm({
   onSaved: (p: Product) => void;
 }) {
   const { settings } = useSession();
+  const { show: showLevels } = usePriceLevels();
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [f, setF] = useState({
     itemCode: "",
@@ -307,13 +309,21 @@ export function ProductForm({
     reorderQty: "" as string | number,
     openingQty: "" as string | number,
   });
-  const [files, setFiles] = useState<FileList | null>(null);
+  // Photos: new files waiting to upload, and saved photos marked for removal
+  const [newPhotos, setNewPhotos] = useState<File[]>([]);
+  const [removed, setRemoved] = useState<string[]>([]);
+  const [photoNote, setPhotoNote] = useState("");
+  // "Average in" helper for the cost
+  const [avg, setAvg] = useState({ qty: "", cost: "" });
   const { busy, run } = useAction();
 
   useEffect(() => {
     if (!open) return;
     api<Supplier[]>("/suppliers").then(setSuppliers).catch(() => {});
-    setFiles(null);
+    setNewPhotos([]);
+    setRemoved([]);
+    setPhotoNote("");
+    setAvg({ qty: "", cost: "" });
     setF({
       itemCode: product?.itemCode ?? "",
       name: product?.name ?? "",
@@ -336,6 +346,31 @@ export function ProductForm({
 
   // Price in = list price less supplier discount (unless typed directly)
   const computedCost = n(f.listPrice) * (1 - n(f.supplierDiscountPct) / 100);
+  const currentCost = f.unitCost === "" ? computedCost : n(f.unitCost);
+
+  // Weighted average: (units on hand x current cost + units bought x new cost) / all units
+  const onHand = Math.max(0, n(product?.qtyOnHand));
+  const avgQty = n(avg.qty);
+  const averaged =
+    avgQty > 0 && avg.cost !== "" ? Math.round(((onHand * currentCost + avgQty * n(avg.cost)) / (onHand + avgQty)) * 10000) / 10000 : null;
+
+  const keptPhotos = (product?.images ?? []).filter((i) => !removed.includes(i));
+  const MAX_PHOTOS = 12;
+  function addPhotos(list: FileList | null) {
+    if (!list) return;
+    const ok = Array.from(list).filter((file) => ["image/png", "image/jpeg", "image/webp"].includes(file.type));
+    const skipped = list.length - ok.length;
+    const room = MAX_PHOTOS - keptPhotos.length - newPhotos.length;
+    setNewPhotos((x) => [...x, ...ok.slice(0, Math.max(0, room))]);
+    setPhotoNote(
+      [
+        skipped > 0 && `${skipped} file${skipped === 1 ? " isn't a" : "s aren't"} JPG, PNG or WebP photo${skipped === 1 ? "" : "s"} and ${skipped === 1 ? "was" : "were"} skipped.`,
+        ok.length > room && `An item can have up to ${MAX_PHOTOS} photos.`,
+      ]
+        .filter(Boolean)
+        .join(" ")
+    );
+  }
 
   async function save() {
     const form = new FormData();
@@ -346,7 +381,8 @@ export function ProductForm({
     }
     // Empty optional fields are sent as "null" so they can be cleared
     for (const k of ["sellPriceOverride", "categoryId", "supplierId"] as const) if (f[k] === "") form.set(k, "null");
-    if (files) Array.from(files).forEach((file) => form.append("images", file));
+    newPhotos.forEach((file) => form.append("images", file));
+    if (removed.length) form.append("removeImages", removed.join(","));
     const saved = await run(
       () =>
         product
@@ -393,6 +429,7 @@ export function ProductForm({
         <Field label="Collection / door style"><Input value={f.collection} onChange={(e) => set("collection", e.target.value)} /></Field>
         <Field label="Description" className="sm:col-span-3"><Textarea value={f.description} onChange={(e) => set("description", e.target.value)} /></Field>
       </div>
+
       <fieldset className="mt-5 rounded-lux border border-hairline px-5 py-5">
         <legend className="px-2 font-display text-lg font-semibold text-walnut">Price in and price out</legend>
         <div className="grid gap-4 sm:grid-cols-4">
@@ -405,12 +442,38 @@ export function ProductForm({
             <Input type="number" step="0.01" min={0} value={f.sellPriceOverride} onChange={(e) => set("sellPriceOverride", e.target.value)} />
           </Field>
         </div>
-        {settings && (
+
+        {product && (
+          <div className="mt-4 rounded-lux bg-linen/70 px-4 py-4">
+            <div className="text-sm font-semibold text-walnut">Average a new cost in</div>
+            <p className="mt-0.5 text-sm text-oak">
+              Bought more at a different price? Enter it and the cost becomes the weighted average of the{" "}
+              {onHand} on hand at {money(currentCost)} and the new units.
+            </p>
+            <div className="mt-3 flex flex-wrap items-end gap-3">
+              <Field label="Units bought" className="w-32"><Input type="number" min={0} step="any" value={avg.qty} onChange={(e) => setAvg({ ...avg, qty: e.target.value })} /></Field>
+              <Field label="Cost each" className="w-36"><Input type="number" min={0} step="0.01" value={avg.cost} onChange={(e) => setAvg({ ...avg, cost: e.target.value })} /></Field>
+              <div className="pb-2 text-sm">
+                {averaged !== null ? <>New average: <b className="num text-walnut">{money(averaged)}</b></> : <span className="text-oak">New average: —</span>}
+              </div>
+              <Button
+                size="sm"
+                variant="secondary"
+                disabled={averaged === null}
+                onClick={() => { set("unitCost", String(averaged)); setAvg({ qty: "", cost: "" }); }}
+              >
+                Use this average
+              </Button>
+            </div>
+            <p className="mt-2 text-xs text-oak">This only changes the cost. To add the units to stock, use &ldquo;Adjust stock&rdquo; or receive a purchase order — both average the cost in for you.</p>
+          </div>
+        )}
+
+        {settings && showLevels && (
           <p className="mt-3 text-sm text-oak">
             Price out by level:{" "}
             {settings.priceTiers.map((t) => {
-              const cost = f.unitCost === "" ? computedCost : n(f.unitCost);
-              const price = f.sellPriceOverride !== "" ? n(f.sellPriceOverride) : cost * (1 + n(t.markupPct) / 100);
+              const price = f.sellPriceOverride !== "" ? n(f.sellPriceOverride) : currentCost * (1 + n(t.markupPct) / 100);
               return (
                 <span key={t.code} className="mr-3 whitespace-nowrap">
                   <b className="text-walnut">{t.code}</b> {money(price)}
@@ -420,6 +483,7 @@ export function ProductForm({
           </p>
         )}
       </fieldset>
+
       <div className="mt-5 grid gap-4 sm:grid-cols-4">
         <Field label="Unit"><Input value={f.unit} onChange={(e) => set("unit", e.target.value)} /></Field>
         <Field label="Reorder when at or below"><Input type="number" min={0} value={f.reorderPoint} onChange={(e) => set("reorderPoint", e.target.value)} /></Field>
@@ -428,14 +492,63 @@ export function ProductForm({
           <Field label="Opening stock" hint="Counted on hand now"><Input type="number" min={0} value={f.openingQty} onChange={(e) => set("openingQty", e.target.value)} /></Field>
         )}
       </div>
-      <div className="mt-4 flex flex-wrap items-center gap-6">
-        <Checkbox label="Charge sales tax" checked={f.taxable} onChange={(v) => set("taxable", v)} />
-        <label className="text-sm">
-          <span className="mr-2 text-walnut">Photos</span>
-          <input type="file" accept="image/png,image/jpeg,image/webp" multiple onChange={(e) => setFiles(e.target.files)} />
-        </label>
-      </div>
+      <div className="mt-4"><Checkbox label="Charge sales tax" checked={f.taxable} onChange={(v) => set("taxable", v)} /></div>
+
+      <fieldset className="mt-5 rounded-lux border border-hairline px-5 py-5">
+        <legend className="px-2 font-display text-lg font-semibold text-walnut">Photos</legend>
+        <div className="flex flex-wrap gap-3">
+          {keptPhotos.map((img) => (
+            <PhotoThumb key={img} src={imageUrl(img)} onRemove={() => setRemoved((r) => [...r, img])} />
+          ))}
+          {newPhotos.map((file, i) => (
+            <PhotoThumb key={`${file.name}-${i}`} file={file} isNew onRemove={() => setNewPhotos((x) => x.filter((_, j) => j !== i))} />
+          ))}
+          {keptPhotos.length + newPhotos.length < MAX_PHOTOS && (
+            <label className="flex h-28 w-28 cursor-pointer flex-col items-center justify-center gap-1 rounded-lux border-2 border-dashed border-hairline text-sm font-semibold text-oak hover:border-brass hover:text-walnut">
+              <ImagePlus size={22} aria-hidden />
+              Add photos
+              <input
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                multiple
+                className="sr-only"
+                onChange={(e) => { addPhotos(e.target.files); e.target.value = ""; }}
+              />
+            </label>
+          )}
+        </div>
+        <p className="mt-2 text-xs text-oak">
+          Up to {MAX_PHOTOS} photos (JPG, PNG or WebP, 5 MB each). You can pick several at once, or add more one after another.
+          {removed.length > 0 && ` ${removed.length} photo${removed.length === 1 ? "" : "s"} will be removed when you save.`}
+        </p>
+        {photoNote && <p className="mt-1 text-sm text-due">{photoNote}</p>}
+      </fieldset>
     </Modal>
+  );
+}
+
+function PhotoThumb({ src, file, isNew, onRemove }: { src?: string; file?: File; isNew?: boolean; onRemove: () => void }) {
+  const [url, setUrl] = useState(src ?? "");
+  useEffect(() => {
+    if (!file) return;
+    const u = URL.createObjectURL(file);
+    setUrl(u);
+    return () => URL.revokeObjectURL(u);
+  }, [file]);
+  return (
+    <div className="relative h-28 w-28 overflow-hidden rounded-lux border border-hairline bg-linen">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      {url && <img src={url} alt="" className="h-full w-full object-cover" />}
+      {isNew && <span className="absolute bottom-1 left-1 rounded-full bg-walnut px-2 py-0.5 text-[11px] font-semibold text-ivory">New</span>}
+      <button
+        type="button"
+        aria-label="Remove photo"
+        onClick={onRemove}
+        className="absolute right-1 top-1 rounded-full bg-white/90 p-1 text-walnut shadow hover:bg-white hover:text-late"
+      >
+        <X size={14} />
+      </button>
+    </div>
   );
 }
 

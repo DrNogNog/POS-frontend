@@ -1,17 +1,17 @@
 "use client";
 // Items & stock: every product with price in, price out and quantity on hand.
 import Link from "next/link";
+import { PackagePlus, Pencil } from "lucide-react";
 import { useState } from "react";
-import { api } from "@/lib/api";
-import { parseCsv } from "@/lib/csv";
 import { useApi, useDebounced, useSort } from "@/lib/hooks";
 import { useSession } from "@/lib/session";
 import { usePriceLevels } from "@/lib/privacy";
 import { money, n, qty } from "@/lib/format";
 import type { Product } from "@/lib/types";
-import { Button, Checkbox, Empty, ErrorNote, Field, Input, Loading, Modal, PageHeader, Panel, Select, Table, Td, Th, useAction } from "@/components/ui";
+import { Button, Checkbox, Empty, ErrorNote, Field, Input, Loading, PageHeader, Panel, Select, Table, Td, Th } from "@/components/ui";
 import { ItemCode } from "@/components/ItemCode";
 import { ProductForm } from "@/components/forms";
+import { ImportDialog } from "@/components/ImportDialog";
 
 export default function ProductsPage() {
   const { settings, can } = useSession();
@@ -31,6 +31,8 @@ export default function ProductsPage() {
   if (inStock) params.set("inStock", "true");
   const { data, error, loading, reload } = useApi<{ items: Product[]; total: number }>(`/products?${params}`);
   const [adding, setAdding] = useState(false);
+  const [editing, setEditing] = useState<Product | null>(null);
+  const manager = can("MANAGER");
   const [importing, setImporting] = useState(false);
   const markup = n(settings?.priceTiers.find((t) => t.code === tier)?.markupPct);
 
@@ -71,7 +73,7 @@ export default function ProductsPage() {
         {loading && !data ? (
           <Loading />
         ) : !data?.items.length ? (
-          <Empty>No items found.{can("MANAGER") && " Add one, or import the price list."}</Empty>
+          <Empty>No items found.{manager && " Add one with “New item”, or bring in a whole list with “Import price list”."}</Empty>
         ) : (
           <>
             <Table>
@@ -84,6 +86,7 @@ export default function ProductsPage() {
                   {showLevels && <Th sortKey="unitCost" sort={sort} className="text-right">Price in</Th>}
                   <Th className="text-right">{showLevels ? `Price out (${tier})` : "Price"}</Th>
                   <Th sortKey="qtyOnHand" sort={sort} className="text-right">On hand</Th>
+                  {manager && <Th className="text-right">Change</Th>}
                 </tr>
               </thead>
               <tbody>
@@ -103,6 +106,16 @@ export default function ProductsPage() {
                       {showLevels && <Td className="num">{money(cost)}{n(p.supplierDiscountPct) > 0 && <div className="text-xs text-oak">{n(p.supplierDiscountPct)}% off list</div>}</Td>}
                       <Td className="num font-medium">{money(price)}</Td>
                       <Td className={`num font-medium ${low ? "text-late" : ""}`}>{qty(p.qtyOnHand)} <span className="text-xs text-oak">{p.unit}</span></Td>
+                      {manager && (
+                        <Td className="whitespace-nowrap text-right">
+                          <Button size="sm" variant="ghost" onClick={() => setEditing(p)} aria-label={`Edit ${p.itemCode}`}>
+                            <Pencil size={15} /> Edit
+                          </Button>
+                          <Link href={`/products/${p.id}?adjust=1`} aria-label={`Adjust stock of ${p.itemCode}`}>
+                            <Button size="sm" variant="ghost"><PackagePlus size={15} /> Stock</Button>
+                          </Link>
+                        </Td>
+                      )}
                     </tr>
                   );
                 })}
@@ -119,67 +132,8 @@ export default function ProductsPage() {
         )}
       </Panel>
       <ProductForm open={adding} onClose={() => setAdding(false)} onSaved={() => reload()} />
+      <ProductForm open={!!editing} product={editing} onClose={() => setEditing(null)} onSaved={() => reload()} />
       <ImportDialog open={importing} onClose={() => setImporting(false)} onDone={() => reload()} />
     </>
-  );
-}
-
-function ImportDialog({ open, onClose, onDone }: { open: boolean; onClose: () => void; onDone: () => void }) {
-  const [rows, setRows] = useState<Record<string, string>[]>([]);
-  const [progress, setProgress] = useState("");
-  const { busy, run } = useAction();
-
-  async function importRows() {
-    let created = 0;
-    let updated = 0;
-    const ok = await run(async () => {
-      for (let i = 0; i < rows.length; i += 1000) {
-        setProgress(`Importing ${i + 1}–${Math.min(i + 1000, rows.length)} of ${rows.length}…`);
-        const chunk = rows.slice(i, i + 1000).map((r) => ({
-          ...r,
-          listPrice: r.listPrice || 0,
-          supplierDiscountPct: r.supplierDiscountPct || 0,
-          unitCost: r.unitCost === "" ? undefined : r.unitCost,
-          qtyOnHand: r.qtyOnHand === "" || r.qtyOnHand === undefined ? undefined : r.qtyOnHand,
-        }));
-        const res = await api<{ created: number; updated: number }>("/products/import", { body: { rows: chunk } });
-        created += res.created;
-        updated += res.updated;
-      }
-      return true;
-    });
-    setProgress(ok ? `Done: ${created} new items, ${updated} updated.` : "");
-    if (ok) onDone();
-  }
-
-  return (
-    <Modal
-      open={open}
-      onClose={onClose}
-      title="Import a price list"
-      footer={
-        <>
-          <Button variant="secondary" onClick={onClose}>Close</Button>
-          <Button onClick={importRows} busy={busy} disabled={!rows.length}>Import {rows.length.toLocaleString()} items</Button>
-        </>
-      }
-    >
-      <p className="mb-3 text-sm text-oak">
-        Choose a CSV file with the columns <b>itemCode, name, description, category, collection, supplier, listPrice, supplierDiscountPct</b>{" "}
-        (optional: unitCost, unit, qtyOnHand). The 2025 cabinet price list is ready at <b>POS-backend/data/pricelist-2025.csv</b>.
-        Existing codes get their prices updated; stock isn&apos;t changed.
-      </p>
-      <input
-        type="file"
-        accept=".csv,text/csv"
-        onChange={async (e) => {
-          const file = e.target.files?.[0];
-          setProgress("");
-          setRows(file ? parseCsv(await file.text()).filter((r) => r.itemCode && r.name) : []);
-        }}
-      />
-      {rows.length > 0 && <p className="mt-3 text-sm">{rows.length.toLocaleString()} items found. First: <b>{rows[0].itemCode}</b> {rows[0].name}</p>}
-      {progress && <p className="mt-3 text-sm text-walnut">{progress}</p>}
-    </Modal>
   );
 }
