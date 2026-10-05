@@ -2,6 +2,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { useApi, useDebounced } from "@/lib/hooks";
+import { usePriceLevels } from "@/lib/privacy";
 import { date, money, termsLabel } from "@/lib/format";
 import type { Customer } from "@/lib/types";
 import { Badge, Button, Empty, ErrorNote, Input, Loading, PageHeader, Panel, Table, Td, Th } from "@/components/ui";
@@ -12,6 +13,7 @@ export default function CustomersPage() {
   const debounced = useDebounced(q);
   const { data, error, loading, reload } = useApi<Customer[]>(`/customers${debounced ? `?q=${encodeURIComponent(debounced)}` : ""}`);
   const [adding, setAdding] = useState(false);
+  const { show: showLevels } = usePriceLevels();
 
   return (
     <>
@@ -30,7 +32,7 @@ export default function CustomersPage() {
         ) : (
           <Table>
             <thead>
-              <tr><Th>Name</Th><Th>Phone</Th><Th>Terms</Th><Th>Level</Th><Th>Last purchase</Th><Th className="text-right">Lifetime sales</Th><Th className="text-right">Owes</Th></tr>
+              <tr><Th>Name</Th><Th>Phone</Th><Th>Terms</Th>{showLevels && <Th>Level</Th>}<Th>Last purchase</Th><Th className="text-right">Lifetime sales</Th><Th className="text-right">Owes</Th></tr>
             </thead>
             <tbody>
               {data.map((c) => (
@@ -41,7 +43,7 @@ export default function CustomersPage() {
                   </Td>
                   <Td>{c.phone}</Td>
                   <Td>{termsLabel(c.termsDays)}</Td>
-                  <Td><Badge>{c.priceTierCode}</Badge></Td>
+                  {showLevels && <Td><Badge>{c.priceTierCode}</Badge></Td>}
                   <Td>{date(c.lastPurchase)}</Td>
                   <Td className="num">{money(c.lifetimeSales)}</Td>
                   <Td className={`num font-medium ${(c.balance ?? 0) > 0 ? "text-late" : ""}`}>{money(c.balance)}</Td>

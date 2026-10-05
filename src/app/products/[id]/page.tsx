@@ -8,6 +8,7 @@ import { useState } from "react";
 import { api, imageUrl } from "@/lib/api";
 import { useApi } from "@/lib/hooks";
 import { useSession } from "@/lib/session";
+import { Private, usePriceLevels } from "@/lib/privacy";
 import { date, dateTime, money, n, pct, qty } from "@/lib/format";
 import type { Product, Supplier } from "@/lib/types";
 import { Button, ErrorNote, Field, Input, Loading, Modal, PageHeader, Panel, Stat, Table, Td, Th, useAction } from "@/components/ui";
@@ -34,6 +35,7 @@ const MOVE_LABEL: Record<string, string> = {
 export default function ProductPage() {
   const { id } = useParams<{ id: string }>();
   const { can } = useSession();
+  const { show: showLevels } = usePriceLevels();
   const { data: p, error, reload } = useApi<Detail>(`/products/${id}`);
   const [editing, setEditing] = useState(false);
   const [adjusting, setAdjusting] = useState(false);
@@ -74,13 +76,20 @@ export default function ProductPage() {
       />
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <Stat label="On hand" value={`${qty(p.qtyOnHand)} ${p.unit}`} tone={n(p.reorderPoint) > 0 && n(p.qtyOnHand) <= n(p.reorderPoint) ? "late" : "ink"} note={n(p.reorderPoint) ? `Reorder at ${qty(p.reorderPoint)}` : undefined} />
-        <Stat label="Price in (standard cost)" value={money(p.unitCost)} note={n(p.listPrice) ? `List ${money(p.listPrice)} less ${n(p.supplierDiscountPct)}%` : undefined} />
-        <Stat label="Weighted average cost" value={money(p.weightedAverageCost)} note="Of the units on hand" />
-        <Stat label="Stock value" value={money(p.stockValue)} />
+        {showLevels ? (
+          <>
+            <Stat label="Price in (standard cost)" value={money(p.unitCost)} note={n(p.listPrice) ? `List ${money(p.listPrice)} less ${n(p.supplierDiscountPct)}%` : undefined} />
+            <Stat label="Weighted average cost" value={money(p.weightedAverageCost)} note="Of the units on hand" />
+            <Stat label="Stock value" value={money(p.stockValue)} />
+          </>
+        ) : (
+          <Stat label="Price" value={money(p.prices[p.prices.length - 1]?.price)} note="Costs and price levels are hidden" />
+        )}
       </div>
 
       <div className="mt-6 grid gap-6 xl:grid-cols-2">
         <Panel title="What this code means"><CodeExplanation code={p.itemCode} />{p.description && <p className="mt-4 text-sm text-oak">{p.description}</p>}</Panel>
+        <Private>
         <Panel title="Price out by level" padded={false}>
           <Table>
             <thead><tr><Th>Level</Th><Th className="text-right">Markup</Th><Th className="text-right">Price</Th><Th className="text-right">Margin</Th></tr></thead>
@@ -97,6 +106,7 @@ export default function ProductPage() {
           </Table>
           <p className="p-4 text-xs text-oak">Change level markups on the Settings screen. A fixed selling price on the item overrides them.</p>
         </Panel>
+        </Private>
       </div>
 
       {p.images.length > 0 && (
@@ -111,6 +121,7 @@ export default function ProductPage() {
         </Panel>
       )}
 
+      <Private>
       <div className="mt-6 grid gap-6 xl:grid-cols-2">
         <Panel title="Cost layers on hand" padded={false}>
           {p.lots.length === 0 ? (
@@ -153,6 +164,8 @@ export default function ProductPage() {
           </Table>
         </Panel>
       </div>
+
+      </Private>
 
       <ProductForm open={editing} onClose={() => setEditing(false)} product={p} onSaved={() => reload()} />
       <Modal

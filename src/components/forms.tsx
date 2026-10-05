@@ -4,6 +4,7 @@
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { useSession } from "@/lib/session";
+import { usePriceLevels } from "@/lib/privacy";
 import { isoDay, money, n } from "@/lib/format";
 import type { Customer, Product, Supplier } from "@/lib/types";
 import { Button, Checkbox, Field, Input, Modal, Select, Textarea, useAction } from "./ui";
@@ -44,6 +45,7 @@ export function CustomerForm({
   onSaved: (c: Customer) => void;
 }) {
   const { settings } = useSession();
+  const { show: showLevels } = usePriceLevels();
   const [f, setF] = useState(emptyCustomer);
   const { busy, run } = useAction();
 
@@ -102,13 +104,19 @@ export function CustomerForm({
           </Select>
         </Field>
         <Field label="Delivery notes"><Input value={f.deliveryNotes} onChange={(e) => set("deliveryNotes", e.target.value)} placeholder="Gate code, call ahead…" /></Field>
-        <Field label="Price level">
-          <Select value={f.priceTierCode} onChange={(e) => set("priceTierCode", e.target.value)}>
-            {settings?.priceTiers.map((t) => (
-              <option key={t.code} value={t.code}>{t.code} — {t.name} (+{n(t.markupPct)}%)</option>
-            ))}
-          </Select>
-        </Field>
+        {showLevels ? (
+          <Field label="Price level">
+            <Select value={f.priceTierCode} onChange={(e) => set("priceTierCode", e.target.value)}>
+              {settings?.priceTiers.map((t) => (
+                <option key={t.code} value={t.code}>{t.code} — {t.name} (+{n(t.markupPct)}%)</option>
+              ))}
+            </Select>
+          </Field>
+        ) : (
+          <Field label="Price level" hint="Hidden — use Show price levels at the top to change">
+            <Input value="••••" disabled />
+          </Field>
+        )}
         <Field label="Payment terms" hint="On account: the invoice is due after this many days">
           <Select value={f.termsDays} onChange={(e) => set("termsDays", Number(e.target.value))}>
             <option value={0}>Pay at time of sale</option>

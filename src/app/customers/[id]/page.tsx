@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useState } from "react";
 import { useApi, useSort } from "@/lib/hooks";
+import { Private } from "@/lib/privacy";
 import { date, money, termsLabel } from "@/lib/format";
 import type { Customer, Estimate, Invoice } from "@/lib/types";
 import { Badge, Button, Empty, ErrorNote, Loading, PageHeader, Panel, Stat, Table, Td, Th } from "@/components/ui";
@@ -50,7 +51,7 @@ export default function CustomerPage() {
             <div><dt className="text-oak">Billing address</dt><dd className="whitespace-pre-line">{c.billingAddress || "—"}</dd></div>
             <div><dt className="text-oak">Delivery address</dt><dd className="whitespace-pre-line">{c.shippingAddress || "Same as billing"}</dd></div>
             <div><dt className="text-oak">Usually</dt><dd>{c.fulfillment === "DELIVERY" ? "Gets delivery" : "Picks up"}{c.deliveryNotes && ` — ${c.deliveryNotes}`}</dd></div>
-            <div><dt className="text-oak">Price level</dt><dd><Badge>{c.priceTierCode}</Badge></dd></div>
+            <Private><div><dt className="text-oak">Price level</dt><dd><Badge>{c.priceTierCode}</Badge></dd></div></Private>
             <div>
               <dt className="text-oak">Card on file</dt>
               <dd>{c.cardLast4 ? `${c.cardBrand || "Card"} ending ${c.cardLast4}, exp ${c.cardExp || "?"}${c.cardToken ? " (token saved)" : ""}` : "None"}</dd>

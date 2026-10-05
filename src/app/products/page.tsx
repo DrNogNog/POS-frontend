@@ -6,6 +6,7 @@ import { api } from "@/lib/api";
 import { parseCsv } from "@/lib/csv";
 import { useApi, useDebounced, useSort } from "@/lib/hooks";
 import { useSession } from "@/lib/session";
+import { usePriceLevels } from "@/lib/privacy";
 import { money, n, qty } from "@/lib/format";
 import type { Product } from "@/lib/types";
 import { Button, Checkbox, Empty, ErrorNote, Field, Input, Loading, Modal, PageHeader, Panel, Select, Table, Td, Th, useAction } from "@/components/ui";
@@ -14,6 +15,7 @@ import { ProductForm } from "@/components/forms";
 
 export default function ProductsPage() {
   const { settings, can } = useSession();
+  const { show: showLevels } = usePriceLevels();
   const [q, setQ] = useState("");
   const [categoryId, setCategoryId] = useState("");
   const [lowStock, setLowStock] = useState(false);
@@ -55,11 +57,11 @@ export default function ProductsPage() {
               {settings?.categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </Select>
           </Field>
-          <Field label="Show price at level">
+          {showLevels ? <Field label="Show price at level">
             <Select value={tier} onChange={(e) => setTier(e.target.value)}>
               {settings?.priceTiers.map((t) => <option key={t.code} value={t.code}>{t.code} (+{n(t.markupPct)}%)</option>)}
             </Select>
-          </Field>
+          </Field> : <div />}
           <div className="flex flex-col justify-end gap-1 pb-1">
             <Checkbox label="Running low" checked={lowStock} onChange={(v) => { setLowStock(v); setPage(1); }} />
             <Checkbox label="In stock only" checked={inStock} onChange={(v) => { setInStock(v); setPage(1); }} />
@@ -78,9 +80,9 @@ export default function ProductsPage() {
                   <Th sortKey="itemCode" sort={sort}>Code</Th>
                   <Th sortKey="name" sort={sort}>Item</Th>
                   <Th>Supplier</Th>
-                  <Th className="text-right">List</Th>
-                  <Th sortKey="unitCost" sort={sort} className="text-right">Price in</Th>
-                  <Th className="text-right">Price out ({tier})</Th>
+                  {showLevels && <Th className="text-right">List</Th>}
+                  {showLevels && <Th sortKey="unitCost" sort={sort} className="text-right">Price in</Th>}
+                  <Th className="text-right">{showLevels ? `Price out (${tier})` : "Price"}</Th>
                   <Th sortKey="qtyOnHand" sort={sort} className="text-right">On hand</Th>
                 </tr>
               </thead>
@@ -97,8 +99,8 @@ export default function ProductsPage() {
                         <div className="text-xs text-oak">{[p.category?.name, p.collection].filter(Boolean).join(" · ")}</div>
                       </Td>
                       <Td>{p.supplier?.name ?? "—"}</Td>
-                      <Td className="num text-oak">{n(p.listPrice) ? money(p.listPrice) : "—"}</Td>
-                      <Td className="num">{money(cost)}{n(p.supplierDiscountPct) > 0 && <div className="text-xs text-oak">{n(p.supplierDiscountPct)}% off list</div>}</Td>
+                      {showLevels && <Td className="num text-oak">{n(p.listPrice) ? money(p.listPrice) : "—"}</Td>}
+                      {showLevels && <Td className="num">{money(cost)}{n(p.supplierDiscountPct) > 0 && <div className="text-xs text-oak">{n(p.supplierDiscountPct)}% off list</div>}</Td>}
                       <Td className="num font-medium">{money(price)}</Td>
                       <Td className={`num font-medium ${low ? "text-late" : ""}`}>{qty(p.qtyOnHand)} <span className="text-xs text-oak">{p.unit}</span></Td>
                     </tr>

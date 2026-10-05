@@ -6,6 +6,7 @@ import { useState } from "react";
 import { api, openPdf } from "@/lib/api";
 import { useApi } from "@/lib/hooks";
 import { useSession } from "@/lib/session";
+import { usePriceLevels } from "@/lib/privacy";
 import { date, dateTime, isoDay, money, n, qty, termsLabel } from "@/lib/format";
 import type { Invoice } from "@/lib/types";
 import { Button, ErrorNote, Field, Input, Loading, Modal, PageHeader, Panel, Table, Td, Th, Textarea, useAction } from "@/components/ui";
@@ -23,6 +24,9 @@ export default function InvoicePage() {
   const [text, setText] = useState("");
   const [amount, setAmount] = useState("");
   const { busy, run } = useAction();
+  const { show: showLevels } = usePriceLevels();
+  // Costs and profit only for bookkeepers, and only while price levels are shown
+  const showCost = can("MANAGER", "ACCOUNTANT") && showLevels;
   const books = can("MANAGER", "ACCOUNTANT");
 
   if (error) return <ErrorNote>{error}</ErrorNote>;
@@ -92,7 +96,7 @@ export default function InvoicePage() {
                   <Th className="text-right">Qty</Th>
                   <Th className="text-right">Price</Th>
                   <Th className="text-right">Amount</Th>
-                  {books && <Th className="text-right">Cost</Th>}
+                  {showCost && <Th className="text-right">Cost</Th>}
                 </tr>
               </thead>
               <tbody>
@@ -103,7 +107,7 @@ export default function InvoicePage() {
                     <Td className="num">{qty(l.qty)}</Td>
                     <Td className="num">{money(l.unitPrice)}</Td>
                     <Td className="num font-medium">{money(l.lineTotal)}</Td>
-                    {books && <Td className="num text-oak">{money(n(l.unitCost) * n(l.qty))}</Td>}
+                    {showCost && <Td className="num text-oak">{money(n(l.unitCost) * n(l.qty))}</Td>}
                   </tr>
                 ))}
               </tbody>
@@ -158,7 +162,7 @@ export default function InvoicePage() {
                 Pays by {date(inv.earlyDiscountDeadline)} → takes {n(inv.earlyPayDiscountPct)}% off ({money(inv.earlyDiscountAmount)}).
               </p>
             )}
-            {books && (
+            {showCost && (
               <dl className="mt-4 space-y-1 border-t border-hairline pt-3 text-sm text-oak">
                 <Row label="Cost of goods" value={money(inv.cogsTotal)} />
                 <Row label="Gross profit" value={money(profit)} />

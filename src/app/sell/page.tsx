@@ -13,6 +13,7 @@ import { useRouter } from "next/navigation";
 import { Plus, Trash2 } from "lucide-react";
 import { api } from "@/lib/api";
 import { useQueryParam } from "@/lib/hooks";
+import { Private, usePriceLevels } from "@/lib/privacy";
 import { useSession } from "@/lib/session";
 import { money, n, qty, termsLabel } from "@/lib/format";
 import type { Customer, Estimate, Invoice, Product } from "@/lib/types";
@@ -41,6 +42,7 @@ const round2 = (x: number) => Math.round(x * 100 + Number.EPSILON) / 100;
 export default function SellPage() {
   const router = useRouter();
   const { settings } = useSession();
+  const { show: showLevels } = usePriceLevels();
   const estimateParam = useQueryParam("estimate");
   const customerParam = useQueryParam("customer");
   const { busy, run } = useAction();
@@ -248,7 +250,7 @@ export default function SellPage() {
                   <div className="text-lg font-semibold text-walnut">{customer.name}</div>
                   <div className="text-sm text-oak">{[customer.company, customer.phone, customer.email].filter(Boolean).join(" · ")}</div>
                   <div className="mt-2 flex flex-wrap gap-2">
-                    <Badge>Price level {customer.priceTierCode}</Badge>
+                    <Private><Badge>Price level {customer.priceTierCode}</Badge></Private>
                     <Badge>{termsLabel(customer.termsDays)}</Badge>
                     <Badge>{customer.fulfillment === "DELIVERY" ? "Delivery" : "Pickup"}</Badge>
                     {customer.taxExempt && <Badge tone="due">Tax exempt</Badge>}
@@ -308,8 +310,9 @@ export default function SellPage() {
                         <Input className="h-9" value={l.description} onChange={(e) => update(l.key, { description: e.target.value })} />
                         {l.productId && l.onHand !== null && (
                           <div className={`mt-1 text-xs ${n(l.qty) > l.onHand ? "text-late" : "text-oak"}`}>
-                            {qty(l.onHand)} on hand{l.unitCost > 0 && ` · cost ${money(l.unitCost)}`}
-                            {margin !== null && ` · margin ${margin.toFixed(0)}%`}
+                            {qty(l.onHand)} on hand
+                            {showLevels && l.unitCost > 0 && ` · cost ${money(l.unitCost)}`}
+                            {showLevels && margin !== null && ` · margin ${margin.toFixed(0)}%`}
                           </div>
                         )}
                       </Td>
@@ -340,13 +343,15 @@ export default function SellPage() {
         <div className="space-y-6">
           <Panel title="Pricing">
             <div className="space-y-4">
-              <Field label="Price level">
-                <Select value={tier} onChange={(e) => changeTier(e.target.value)}>
-                  {settings?.priceTiers.map((t) => (
-                    <option key={t.code} value={t.code}>{t.code} — {t.name} (cost +{n(t.markupPct)}%)</option>
-                  ))}
-                </Select>
-              </Field>
+              <Private fallback={<p className="text-sm text-oak">Price level is hidden. Use &ldquo;Show price levels&rdquo; at the top to change it.</p>}>
+                <Field label="Price level">
+                  <Select value={tier} onChange={(e) => changeTier(e.target.value)}>
+                    {settings?.priceTiers.map((t) => (
+                      <option key={t.code} value={t.code}>{t.code} — {t.name} (cost +{n(t.markupPct)}%)</option>
+                    ))}
+                  </Select>
+                </Field>
+              </Private>
               <Field label="Discount on this order">
                 <div className="flex gap-2">
                   <Select className="w-20" value={discountMode} onChange={(e) => setDiscountMode(e.target.value as "$" | "%")}>
@@ -375,7 +380,7 @@ export default function SellPage() {
               {totals.discount > 0 && <div className="flex justify-between"><dt>Discount</dt><dd className="num">−{money(totals.discount)}</dd></div>}
               <div className="flex justify-between"><dt>Tax ({taxRate}%)</dt><dd className="num">{money(totals.tax)}</dd></div>
               <div className="flex justify-between pt-2 text-xl font-semibold text-walnut"><dt>Total</dt><dd className="num">{money(totals.total)}</dd></div>
-              {totals.cost > 0 && (
+              {showLevels && totals.cost > 0 && (
                 <div className="flex justify-between pt-1 text-xs text-oak">
                   <dt>Our cost / profit</dt>
                   <dd className="num">{money(totals.cost)} / {money(totals.subtotal - totals.discount - totals.cost)}</dd>

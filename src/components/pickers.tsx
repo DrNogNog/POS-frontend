@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { useDebounced } from "@/lib/hooks";
 import { money, qty } from "@/lib/format";
+import { usePriceLevels } from "@/lib/privacy";
 import type { Customer, Product } from "@/lib/types";
 import { Input } from "./ui";
 
@@ -34,6 +35,7 @@ export function ProductSearch({
   const [active, setActive] = useState(0);
   const debounced = useDebounced(q);
   const ref = useOutsideClose(() => setOpen(false));
+  const { show: showLevels } = usePriceLevels();
 
   useEffect(() => {
     if (!debounced.trim()) return setResults([]);
@@ -89,7 +91,7 @@ export function ProductSearch({
                   <span className="text-ink">{p.name}</span>
                 </span>
                 <span className="num text-oak">
-                  {qty(p.qtyOnHand)} on hand · cost {money(p.unitCost)}
+                  {qty(p.qtyOnHand)} on hand{showLevels && ` · cost ${money(p.unitCost)}`}
                 </span>
               </button>
             </li>

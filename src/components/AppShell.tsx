@@ -30,9 +30,12 @@ import {
   Calculator,
   Factory,
   Archive,
+  Eye,
+  EyeOff,
   type LucideIcon,
 } from "lucide-react";
 import { useSession } from "@/lib/session";
+import { usePriceLevels } from "@/lib/privacy";
 import { cn } from "@/lib/utils";
 import type { Role } from "@/lib/types";
 
@@ -128,6 +131,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
   const router = useRouter();
   const { user, loading, logout, can } = useSession();
   const [menuOpen, setMenuOpen] = useState(false);
+  const levels = usePriceLevels();
   const isLogin = pathname.startsWith("/login");
 
   useEffect(() => {
@@ -192,6 +196,18 @@ export default function AppShell({ children }: { children: ReactNode }) {
             <StoreSwitcher />
           </div>
           <div className="flex items-center gap-3 text-sm">
+            <button
+              onClick={levels.toggle}
+              aria-pressed={levels.show}
+              title="Price levels, costs and margins — hide them when a customer can see the screen"
+              className={cn(
+                "inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 font-medium",
+                levels.show ? "border-walnut bg-walnut text-white" : "border-hairline text-walnut hover:bg-linen"
+              )}
+            >
+              {levels.show ? <EyeOff size={16} /> : <Eye size={16} />}
+              {levels.show ? "Hide price levels" : "Show price levels"}
+            </button>
             <span className="hidden text-oak sm:inline">
               {user.name} <span className="text-oak/70">({user.role.toLowerCase()})</span>
             </span>

@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { api, openPdf } from "@/lib/api";
 import { useApi, useDebounced, useQueryParam, useSort } from "@/lib/hooks";
+import { Private } from "@/lib/privacy";
 import { date, firstLine, money, n } from "@/lib/format";
 import type { Estimate, Invoice } from "@/lib/types";
 import { Button, Checkbox, Empty, ErrorNote, Field, Input, Loading, Modal, Panel, Select, Table, Td, Th, useAction } from "./ui";
@@ -150,7 +151,7 @@ export default function EstimatesBoard({ statuses }: { statuses?: Estimate["stat
             <div className="mb-4 flex flex-wrap gap-6 text-sm">
               <div><div className="text-oak">Date</div>{date(detail.date)}</div>
               <div><div className="text-oak">Status</div><EstimateStatus status={detail.status} /></div>
-              <div><div className="text-oak">Price level</div>{detail.priceTierCode}</div>
+              <Private><div><div className="text-oak">Price level</div>{detail.priceTierCode}</div></Private>
               <div><div className="text-oak">Fulfillment</div>{detail.fulfillment === "DELIVERY" ? "Delivery" : "Pickup"}</div>
             </div>
             <div className="mb-4 whitespace-pre-line text-sm">{detail.billTo}</div>
