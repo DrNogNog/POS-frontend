@@ -99,7 +99,7 @@ export function ProductSearch({
                 ? "Searching…"
                 : loaded
                   ? <>No items match &ldquo;{term}&rdquo;. Try part of the code (e.g. W3030) or the name, or add a custom line.</>
-                  : <>There are no items in this store yet. Add them, or import the price list, on <b>Items &amp; stock</b>.</>}
+                  : <>There are no items yet. Add them, or import the price list, on <b>Items &amp; stock</b>.</>}
             </p>
           ) : (
             <ul>

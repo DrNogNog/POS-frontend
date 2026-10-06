@@ -10,7 +10,8 @@ The screens for the Champion POS, in a brown & white theme. Built with Next.js.
    npm install
    npm run dev
    ```
-3. Open http://localhost:3000, pick **Store A** or **Store B**, and log in.
+3. Open http://localhost:3000 and log in. The store you're in is whichever drive the
+   backend's database is running from; its name shows at the top of every screen.
 
 If the API isn't at `http://localhost:4000`, copy `.env.example` to `.env.local` and set
 `NEXT_PUBLIC_API_URL`.

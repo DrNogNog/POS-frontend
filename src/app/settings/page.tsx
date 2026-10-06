@@ -12,12 +12,15 @@ import { Badge, Button, Checkbox, Field, Input, Loading, Modal, PageHeader, Pane
 type Tab = "store" | "money" | "tiers" | "tax" | "users";
 
 export default function SettingsPage() {
-  const { settings, reloadSettings, store, can } = useSession();
+  const { settings, reloadSettings, can } = useSession();
   const [tab, setTab] = useState<Tab>("store");
   if (!settings) return <Loading />;
   return (
     <>
-      <PageHeader title="Settings" subtitle={`These settings apply to ${store?.name ?? "this store"} only. Each store has its own.`} />
+      <PageHeader
+        title="Settings"
+        subtitle={`These settings belong to ${settings.settings.name || "this store"} and are saved on its drive. Each store's drive has its own.`}
+      />
       <Tabs
         value={tab}
         onChange={setTab}
@@ -200,7 +203,7 @@ function Users() {
     <Panel title="People who can log in to this store" className="max-w-3xl" padded={false} actions={<Button size="sm" onClick={() => setEdit({ role: "CASHIER", active: true })}>Add user</Button>}>
       <p className="px-5 pt-4 text-sm text-oak">
         Owner: everything. Manager: everything except users. Accountant: books, receivables, payables, payroll. Cashier: sales and customers.
-        To use the other store, add the same email there too.
+        Logins are saved on this store&apos;s drive — to use another store, add the person there too.
       </p>
       <Table>
         <thead><tr><Th>Name</Th><Th>Email</Th><Th>Role</Th><Th /></tr></thead>

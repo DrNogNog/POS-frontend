@@ -97,34 +97,15 @@ const NAV: { group: string; items: NavItem[] }[] = [
   },
 ];
 
-function StoreSwitcher() {
-  const { store, stores, switchStore } = useSession();
-  const [error, setError] = useState("");
-  if (!store) return null;
+/** The store whose drive the server is running from (name comes from Settings). */
+function StoreName() {
+  const { store, settings } = useSession();
+  const name = settings?.settings.name || store?.name;
+  if (!name) return null;
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center gap-2 px-2" title="This store's data is on the drive the POS server is running from">
       <StoreIcon size={18} className="text-oak" aria-hidden />
-      <label className="sr-only" htmlFor="store-switch">Store</label>
-      <select
-        id="store-switch"
-        value={store.id}
-        onChange={async (e) => {
-          setError("");
-          try {
-            await switchStore(e.target.value);
-          } catch (err) {
-            setError(err instanceof Error ? err.message : String(err));
-          }
-        }}
-        className="h-10 rounded-lux border border-hairline bg-white px-3.5 pr-9 font-semibold text-walnut"
-      >
-        {stores.map((s) => (
-          <option key={s.id} value={s.id}>
-            Store {s.id} — {s.name}
-          </option>
-        ))}
-      </select>
-      {error && <span className="text-sm text-late">{error}</span>}
+      <span className="font-semibold text-walnut">{name}</span>
     </div>
   );
 }
@@ -229,7 +210,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
               {navHidden ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
               {navHidden ? "Show menu" : "Hide menu"}
             </button>
-            <StoreSwitcher />
+            <StoreName />
           </div>
           <div className="flex items-center gap-2 text-sm">
             <button

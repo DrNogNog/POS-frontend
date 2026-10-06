@@ -73,7 +73,6 @@ export interface SettingsBundle {
   priceTiers: PriceTier[];
   accounts: Account[];
   categories: Category[];
-  storeId: string;
 }
 
 export interface Supplier {

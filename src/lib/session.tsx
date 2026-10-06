@@ -1,6 +1,7 @@
 "use client";
 // -----------------------------------------------------------------------------
-// Who is logged in, which store we're in, and that store's settings
+// Who is logged in, which store this is (named in Settings — each store's
+// data lives on its own drive), and that store's settings
 // (price tiers, tax rates, categories). Every page reads this with useSession().
 // -----------------------------------------------------------------------------
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
@@ -9,13 +10,12 @@ import type { SettingsBundle, Store, User } from "./types";
 
 interface SessionValue {
   user: User | null;
+  /** The store whose drive the server is running from. */
   store: Store | null;
-  stores: Store[];
   settings: SettingsBundle | null;
   loading: boolean;
   error: string;
   reloadSettings: () => Promise<void>;
-  switchStore: (id: string) => Promise<void>;
   logout: () => void;
   can: (...roles: User["role"][]) => boolean;
 }
@@ -31,7 +31,6 @@ export function useSession() {
 export function SessionProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [store, setStore] = useState<Store | null>(null);
-  const [stores, setStores] = useState<Store[]>([]);
   const [settings, setSettings] = useState<SettingsBundle | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -44,9 +43,6 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     let cancelled = false;
     (async () => {
       try {
-        const list = await api<Store[]>("/auth/stores");
-        if (cancelled) return;
-        setStores(list);
         if (!session.token) return;
         const me = await api<{ user: User; store: Store }>("/auth/me");
         if (cancelled) return;
@@ -64,13 +60,6 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const switchStore = useCallback(async (id: string) => {
-    // Make sure this login also has an account in the other store first.
-    await api("/auth/me", { store: id });
-    session.setStore(id);
-    window.location.href = "/";
-  }, []);
-
   const logout = useCallback(() => {
     session.clear();
     window.location.href = "/login";
@@ -83,7 +72,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
   return (
     <SessionContext.Provider
-      value={{ user, store, stores, settings, loading, error, reloadSettings, switchStore, logout, can }}
+      value={{ user, store, settings, loading, error, reloadSettings, logout, can }}
     >
       {children}
     </SessionContext.Provider>
