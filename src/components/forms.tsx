@@ -15,6 +15,7 @@ const emptyCustomer = {
   name: "",
   company: "",
   phone: "",
+  fax: "",
   email: "",
   billingAddress: "",
   shippingAddress: "",
@@ -92,8 +93,9 @@ export function CustomerForm({
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Name"><Input value={f.name} onChange={(e) => set("name", e.target.value)} /></Field>
         <Field label="Company"><Input value={f.company} onChange={(e) => set("company", e.target.value)} /></Field>
-        <Field label="Phone"><Input value={f.phone} onChange={(e) => set("phone", e.target.value)} /></Field>
-        <Field label="Email"><Input type="email" value={f.email} onChange={(e) => set("email", e.target.value)} /></Field>
+        <Field label="Phone"><Input type="tel" value={f.phone} onChange={(e) => set("phone", e.target.value)} /></Field>
+        <Field label="Fax"><Input type="tel" value={f.fax} onChange={(e) => set("fax", e.target.value)} /></Field>
+        <Field label="Email" className="sm:col-span-2"><Input type="email" value={f.email} onChange={(e) => set("email", e.target.value)} /></Field>
         <Field label="Billing address"><Textarea value={f.billingAddress} onChange={(e) => set("billingAddress", e.target.value)} /></Field>
         <Field label="Delivery address" hint="Leave empty if the same as billing">
           <Textarea value={f.shippingAddress} onChange={(e) => set("shippingAddress", e.target.value)} />

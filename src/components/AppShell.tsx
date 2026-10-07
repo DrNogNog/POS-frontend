@@ -23,7 +23,6 @@ import {
   ScanBarcode,
   Settings,
   ShoppingCart,
-  Store as StoreIcon,
   Truck,
   Users,
   Wallet,
@@ -97,16 +96,20 @@ const NAV: { group: string; items: NavItem[] }[] = [
   },
 ];
 
-/** The store whose drive the server is running from (name comes from Settings). */
-function StoreName() {
+/** The store's own logo (public/Invoice Logo.png) — the same one printed on documents. */
+function StoreLogo() {
   const { store, settings } = useSession();
-  const name = settings?.settings.name || store?.name;
-  if (!name) return null;
+  const name = settings?.settings.name || store?.name || "Store";
   return (
-    <div className="flex items-center gap-2 px-2" title="This store's data is on the drive the POS server is running from">
-      <StoreIcon size={18} className="text-oak" aria-hidden />
-      <span className="font-semibold text-walnut">{name}</span>
-    </div>
+    <Image
+      src="/Invoice%20Logo.png"
+      alt={name}
+      title={name}
+      width={209}
+      height={45}
+      className="h-9 w-auto rounded-[0.25rem]"
+      priority
+    />
   );
 }
 
@@ -210,7 +213,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
               {navHidden ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
               {navHidden ? "Show menu" : "Hide menu"}
             </button>
-            <StoreName />
+            <StoreLogo />
           </div>
           <div className="flex items-center gap-2 text-sm">
             <button

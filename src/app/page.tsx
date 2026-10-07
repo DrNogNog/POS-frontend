@@ -27,13 +27,13 @@ interface Dashboard {
 
 
 export default function DashboardPage() {
-  const { store, user, settings, can } = useSession();
+  const { user, can } = useSession();
   const { data, error, loading } = useApi<Dashboard>("/reports/dashboard");
 
   return (
     <>
       <PageHeader
-        title={settings?.settings.name || store?.name || "Dashboard"}
+        title="Dashboard"
         subtitle={`Good to see you, ${user?.name}.`}
         actions={
           <>

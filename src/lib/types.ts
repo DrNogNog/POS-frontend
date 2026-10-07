@@ -127,6 +127,7 @@ export interface Customer {
   name: string;
   company: string;
   phone: string;
+  fax: string;
   email: string;
   billingAddress: string;
   shippingAddress: string;
@@ -179,6 +180,8 @@ export interface Invoice {
   termsDays: number;
   billTo: string;
   shipTo: string;
+  phone: string;
+  fax: string;
   fulfillment: "PICKUP" | "DELIVERY";
   salesperson: string;
   subtotal: Money;
@@ -218,6 +221,8 @@ export interface Estimate {
   status: "PENDING" | "APPROVED" | "REJECTED" | "INVOICED";
   billTo: string;
   shipTo: string;
+  phone: string;
+  fax: string;
   fulfillment: "PICKUP" | "DELIVERY";
   priceTierCode: string;
   subtotal: Money;

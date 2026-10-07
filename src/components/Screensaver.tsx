@@ -74,7 +74,9 @@ export default function Screensaver({ storeName }: { storeName: string }) {
         <div className="mt-4 font-display text-3xl text-maple">
           {now.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
         </div>
-        <div className="mt-10 text-lg text-ivory/80">{storeName}</div>
+        <div className="mt-10 overflow-hidden rounded-lux bg-white/95 px-3 py-2">
+          <Image src="/Invoice%20Logo.png" alt={storeName} width={209} height={45} className="h-10 w-auto" />
+        </div>
         <div className="mt-2 text-sm text-ivory/55">Touch anywhere to continue</div>
       </div>
     </div>

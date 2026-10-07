@@ -62,6 +62,8 @@ interface Draft {
   taxRateId: string;
   billTo: string;
   shipTo: string;
+  phone?: string;
+  fax?: string;
   fulfillment: "PICKUP" | "DELIVERY";
   notes: string;
   termsDays: number;
@@ -108,6 +110,8 @@ export default function SellPage() {
   const [discountInput, setDiscountInput] = useState("");
   const [taxRateId, setTaxRateId] = useState<string>("");
   const [billTo, setBillTo] = useState("");
+  const [phone, setPhone] = useState("");
+  const [fax, setFax] = useState("");
   const [shipTo, setShipTo] = useState("");
   const [fulfillment, setFulfillment] = useState<"PICKUP" | "DELIVERY">("PICKUP");
   const [notes, setNotes] = useState("");
@@ -135,6 +139,8 @@ export default function SellPage() {
     setDiscountInput(d?.discountInput ?? "");
     setTaxRateId(d?.taxRateId ?? "");
     setBillTo(d?.billTo ?? "");
+    setPhone(d?.phone ?? "");
+    setFax(d?.fax ?? "");
     setShipTo(d?.shipTo ?? "");
     setFulfillment(d?.fulfillment ?? "PICKUP");
     setNotes(d?.notes ?? "");
@@ -155,7 +161,7 @@ export default function SellPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [store?.id]);
   const draft: Draft = {
-    customer, lines, tier, discountMode, discountInput, taxRateId, billTo, shipTo, fulfillment, notes,
+    customer, lines, tier, discountMode, discountInput, taxRateId, billTo, shipTo, phone, fax, fulfillment, notes,
     termsDays, payNow, payAmount, payMethod, payRef, allowBackorder, saveAnyway,
   };
   const draftJson = JSON.stringify(draft);
@@ -201,6 +207,8 @@ export default function SellPage() {
       if (est.customer) setCustomer(est.customer);
       setTier(est.priceTierCode);
       setBillTo(est.billTo);
+      setPhone(est.phone ?? "");
+      setFax(est.fax ?? "");
       setShipTo(est.shipTo);
       setFulfillment(est.fulfillment);
       setNotes(est.notes);
@@ -245,7 +253,10 @@ export default function SellPage() {
     setTermsDays(c.termsDays);
     setPayNow(c.termsDays === 0);
     setFulfillment(c.fulfillment);
-    setBillTo([c.company || c.name, c.company ? c.name : "", c.billingAddress, c.phone].filter(Boolean).join("\n"));
+    // Phone and fax have their own boxes on the documents, so they stay out of "Bill to"
+    setBillTo([c.company || c.name, c.company ? c.name : "", c.billingAddress].filter(Boolean).join("\n"));
+    setPhone(c.phone || "");
+    setFax(c.fax || "");
     setShipTo(c.shippingAddress || "");
     if (c.taxExempt) {
       const exempt = settings?.taxRates.find((t) => n(t.ratePct) === 0);
@@ -354,6 +365,8 @@ export default function SellPage() {
       customerId: customer?.id,
       billTo,
       shipTo,
+      phone,
+      fax,
       fulfillment,
       priceTierCode: tier,
       discountAmount: totals.discount,
@@ -520,8 +533,12 @@ export default function SellPage() {
 
           <Panel title="Addresses and notes">
             <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="Bill to"><Textarea value={billTo} onChange={(e) => setBillTo(e.target.value)} /></Field>
+              <Field label="Bill to" hint="Name and address. Phone and fax go in their own boxes below.">
+                <Textarea value={billTo} onChange={(e) => setBillTo(e.target.value)} />
+              </Field>
               <Field label={fulfillment === "DELIVERY" ? "Deliver to" : "Ship to (optional)"}><Textarea value={shipTo} onChange={(e) => setShipTo(e.target.value)} /></Field>
+              <Field label="Phone"><Input type="tel" value={phone} placeholder="(718) 555-0100" onChange={(e) => setPhone(e.target.value)} /></Field>
+              <Field label="Fax"><Input type="tel" value={fax} placeholder="Optional" onChange={(e) => setFax(e.target.value)} /></Field>
               <Field label="Notes on the document" className="sm:col-span-2"><Textarea value={notes} onChange={(e) => setNotes(e.target.value)} /></Field>
             </div>
           </Panel>

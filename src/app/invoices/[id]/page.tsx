@@ -84,6 +84,12 @@ export default function InvoicePage() {
                   <Link href={`/customers/${inv.customer.id}`} className="font-semibold text-walnut underline">{inv.customer.name}</Link>
                 )}
                 <div className="whitespace-pre-line">{inv.billTo}</div>
+                {(inv.phone || inv.fax) && (
+                  <div className="mt-1 text-oak">
+                    {inv.phone && <div>Phone {inv.phone}</div>}
+                    {inv.fax && <div>Fax {inv.fax}</div>}
+                  </div>
+                )}
               </div>
               <div>
                 <div className="text-oak">{inv.fulfillment === "DELIVERY" ? "Deliver to" : "Pickup"}</div>
