@@ -123,6 +123,7 @@ export default function ProductsPage() {
                   {showLevels && <Th className="text-right">List</Th>}
                   {showLevels && <Th sortKey="unitCost" sort={sort} className="text-right">Price in</Th>}
                   <Th sortKey="price" sort={sort} className="text-right">{showLevels ? `Selling price (${tier})` : "Selling price"}</Th>
+                  <Th className="text-right">Fixed selling price</Th>
                   <Th sortKey="qtyOnHand" sort={sort} className="text-right">On hand</Th>
                   <Th sortKey="dateIn" sort={sort}>Date in</Th>
                   {manager && <Th className="text-right">Change</Th>}
@@ -147,8 +148,8 @@ export default function ProductsPage() {
                         {price > 0 ? money(price) : manager ? (
                           <button type="button" onClick={() => setEditing(p)} className="text-late underline-offset-2 hover:underline" title="No cost or fixed selling price on this item yet">Not set</button>
                         ) : <span className="text-late">Not set</span>}
-                        {p.sellPriceOverride && n(p.sellPriceOverride) > 0 && <div className="text-xs font-normal text-oak">fixed price</div>}
                       </Td>
+                      <Td className="num">{p.sellPriceOverride && n(p.sellPriceOverride) > 0 ? <b className="text-walnut">{money(p.sellPriceOverride)}</b> : <span className="text-oak">—</span>}</Td>
                       <Td className={`num font-medium ${low ? "text-late" : ""}`}>{units(p.qtyOnHand)}</Td>
                       <Td className="whitespace-nowrap"><DateInLabel p={p} /></Td>
                       {manager && (

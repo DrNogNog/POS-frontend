@@ -80,7 +80,7 @@ export default function ProductPage() {
           label={showLevels ? `Selling price (${p.prices[p.prices.length - 1]?.tier ?? ""})` : "Selling price"}
           value={n(p.prices[p.prices.length - 1]?.price) > 0 ? money(p.prices[p.prices.length - 1]?.price) : "Not set"}
           tone={n(p.prices[p.prices.length - 1]?.price) > 0 ? "ink" : "late"}
-          note={p.sellPriceOverride ? "Fixed price" : n(p.prices[p.prices.length - 1]?.price) > 0 ? undefined : "Add a cost or a fixed selling price"}
+          note={p.sellPriceOverride && n(p.sellPriceOverride) > 0 ? `Fixed selling price: ${money(p.sellPriceOverride)}` : n(p.prices[p.prices.length - 1]?.price) > 0 ? "No fixed selling price — set by price level" : "Add a cost or a fixed selling price"}
         />
         {showLevels ? (
           <>
