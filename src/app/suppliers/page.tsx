@@ -32,7 +32,7 @@ export default function SuppliersPage() {
             </thead>
             <tbody>
               {data.map((s) => (
-                <tr key={s.id} className="hover:bg-linen/60">
+                <tr key={s.id}>
                   <Td>
                     <Link href={`/suppliers/${s.id}`} className="font-semibold text-walnut underline">{s.name}</Link>
                     {!s.active && <Badge>Inactive</Badge>}

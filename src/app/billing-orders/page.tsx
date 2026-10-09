@@ -61,7 +61,7 @@ export default function BillingOrdersPage() {
             </thead>
             <tbody>
               {data.map((b) => (
-                <tr key={b.id} className="hover:bg-linen/60">
+                <tr key={b.id}>
                   <Td><button className="font-semibold text-walnut underline" onClick={() => show(b.id)}>{b.billNo}</button></Td>
                   <Td><Link href={`/suppliers/${b.supplierId}`} className="hover:underline">{b.supplier.name}</Link></Td>
                   <Td>{date(b.billDate)}</Td>

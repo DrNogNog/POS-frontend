@@ -10,7 +10,7 @@ import { Private } from "@/lib/privacy";
 import { useSession } from "@/lib/session";
 import { date, firstLine, money, n } from "@/lib/format";
 import type { Estimate, Invoice } from "@/lib/types";
-import { Button, Checkbox, Empty, ErrorNote, Field, Input, Loading, Modal, Panel, Select, Table, Td, Th, useAction } from "./ui";
+import { Button, Checkbox, Empty, ErrorNote, Field, Input, Loading, Modal, Pagination, Panel, Select, Table, Td, Th, useAction } from "./ui";
 import { CardBadge, CardTypeFilter, EstimateStatus } from "./status";
 import { ItemCode } from "./ItemCode";
 
@@ -24,10 +24,15 @@ export default function EstimatesBoard({ statuses }: { statuses?: Estimate["stat
   const [status, setStatus] = useState(statuses?.length === 1 ? statuses[0] : "");
   const debounced = useDebounced(q);
   const sort = useSort<"date" | "total" | "estimateNo">("date");
-  const { data, error, loading, reload } = useApi<Estimate[]>(
-    `/estimates?${sort.query}&q=${encodeURIComponent(debounced)}${status ? `&status=${status}` : ""}${cardType ? `&cardType=${cardType}` : ""}`
-  );
-  const rows = (data ?? []).filter((e) => !statuses || statuses.includes(e.status));
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(25);
+  // Back to page 1 whenever the search, filters or sort change
+  useEffect(() => setPage(1), [debounced, status, cardType, sort.sort, sort.dir]);
+  const params = new URLSearchParams({ page: String(page), limit: String(limit), q: debounced });
+  if (status) params.set("status", status);
+  if (cardType) params.set("cardType", cardType);
+  const { data, error, loading, reload } = useApi<{ items: Estimate[]; total: number }>(`/estimates?${sort.query}&${params}`);
+  const rows = data?.items ?? [];
   const { busy, run } = useAction();
   const [detail, setDetail] = useState<Estimate | null>(null);
   const [converting, setConverting] = useState<Estimate | null>(null);
@@ -100,7 +105,7 @@ export default function EstimatesBoard({ statuses }: { statuses?: Estimate["stat
             </thead>
             <tbody>
               {rows.map((e) => (
-                <tr key={e.id} className="hover:bg-linen/60">
+                <tr key={e.id}>
                   <Td>
                     <button className="font-semibold text-walnut underline" onClick={() => showDetail(e.id)}>{e.estimateNo}</button>
                   </Td>
@@ -127,6 +132,9 @@ export default function EstimatesBoard({ statuses }: { statuses?: Estimate["stat
               ))}
             </tbody>
           </Table>
+        )}
+        {data && data.total > 0 && (
+          <Pagination page={page} limit={limit} total={data.total} onPage={setPage} onLimit={setLimit} noun="estimates" />
         )}
       </Panel>
 

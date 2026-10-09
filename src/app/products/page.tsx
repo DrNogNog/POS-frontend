@@ -8,7 +8,7 @@ import { useSession } from "@/lib/session";
 import { usePriceLevels } from "@/lib/privacy";
 import { money, n, units } from "@/lib/format";
 import type { Product } from "@/lib/types";
-import { Button, Checkbox, Empty, ErrorNote, Field, Input, Loading, PageHeader, Panel, Select, Table, Td, Th } from "@/components/ui";
+import { Button, Checkbox, Empty, ErrorNote, Field, Input, Loading, PageHeader, Panel, Select, Table, Td, Th, Pagination } from "@/components/ui";
 import { ItemCode } from "@/components/ItemCode";
 import { ProductForm } from "@/components/forms";
 import { ImportDialog } from "@/components/ImportDialog";
@@ -28,9 +28,10 @@ export default function ProductsPage() {
   const [dateTo, setDateTo] = useState("");
   const [tier, setTier] = useState("D");
   const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(50);
   const debounced = useDebounced(q);
   const sort = useSort<"itemCode" | "name" | "qtyOnHand" | "unitCost" | "dateIn">("itemCode", "asc");
-  const params = new URLSearchParams({ page: String(page), limit: "50", sort: sort.sort, dir: sort.dir });
+  const params = new URLSearchParams({ page: String(page), limit: String(limit), sort: sort.sort, dir: sort.dir });
   if (debounced) params.set("q", debounced);
   if (categoryId) params.set("categoryId", categoryId);
   if (lowStock) params.set("lowStock", "true");
@@ -123,7 +124,7 @@ export default function ProductsPage() {
                   const price = p.sellPriceOverride ? n(p.sellPriceOverride) : cost * (1 + markup / 100);
                   const low = n(p.reorderPoint) > 0 && n(p.qtyOnHand) <= n(p.reorderPoint);
                   return (
-                    <tr key={p.id} className="hover:bg-linen/60">
+                    <tr key={p.id}>
                       <Td><ItemCode code={p.itemCode} productId={p.id} /></Td>
                       <Td>
                         <Link href={`/products/${p.id}`} className="font-medium text-walnut hover:underline">{p.name}</Link>
@@ -150,13 +151,7 @@ export default function ProductsPage() {
                 })}
               </tbody>
             </Table>
-            <div className="flex items-center justify-between p-4 text-sm text-oak">
-              <span>{data.total.toLocaleString()} items</span>
-              <div className="flex gap-2">
-                <Button size="sm" variant="secondary" disabled={page === 1} onClick={() => setPage(page - 1)}>Previous</Button>
-                <Button size="sm" variant="secondary" disabled={page * 50 >= data.total} onClick={() => setPage(page + 1)}>Next</Button>
-              </div>
-            </div>
+            <Pagination page={page} limit={limit} total={data.total} onPage={setPage} onLimit={setLimit} noun="items" />
           </>
         )}
       </Panel>

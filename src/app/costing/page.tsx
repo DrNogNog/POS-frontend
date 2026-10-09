@@ -281,7 +281,7 @@ function InvoicesTab() {
               <tbody>
                 {data.rows.map((r) => (
                   <Fragment key={r.id}>
-                    <tr className="cursor-pointer hover:bg-linen/60" onClick={() => setOpen(open === r.id ? null : r.id)}>
+                    <tr className="cursor-pointer" onClick={() => setOpen(open === r.id ? null : r.id)}>
                       <Td>{open === r.id ? <ChevronDown size={16} /> : <ChevronRight size={16} />}</Td>
                       <Td>
                         <Link href={`/invoices/${r.id}`} className="font-semibold text-walnut underline" onClick={(e) => e.stopPropagation()}>{r.invoiceNo}</Link>

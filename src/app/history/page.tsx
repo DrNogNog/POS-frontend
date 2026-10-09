@@ -4,7 +4,7 @@
 import { useState } from "react";
 import { useApi, useDebounced } from "@/lib/hooks";
 import { dateTime, money } from "@/lib/format";
-import { Button, Empty, ErrorNote, Field, Input, Loading, PageHeader, Panel, Select, Table, Td, Th } from "@/components/ui";
+import { Empty, ErrorNote, Field, Input, Loading, PageHeader, Panel, Select, Table, Td, Th, Pagination } from "@/components/ui";
 
 interface Entry { id: number; entityType: string; entityRef: string; action: string; summary: string; amount: string | null; userName: string; createdAt: string; details: unknown }
 
@@ -29,8 +29,9 @@ export default function HistoryPage() {
   const [to, setTo] = useState("");
   const [dir, setDir] = useState<"desc" | "asc">("desc");
   const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(50);
   const debounced = useDebounced(q);
-  const params = new URLSearchParams({ page: String(page), limit: "100", dir });
+  const params = new URLSearchParams({ page: String(page), limit: String(limit), dir });
   if (debounced) params.set("q", debounced);
   if (type) params.set("entityType", type);
   if (from) params.set("from", from);
@@ -66,7 +67,7 @@ export default function HistoryPage() {
               <thead><tr><Th>When</Th><Th>Area</Th><Th>What happened</Th><Th className="text-right">Amount</Th><Th>By</Th></tr></thead>
               <tbody>
                 {data.items.map((e) => (
-                  <tr key={e.id} className="hover:bg-linen/60">
+                  <tr key={e.id}>
                     <Td className="whitespace-nowrap">{dateTime(e.createdAt)}</Td>
                     <Td>{TYPE_LABEL[e.entityType] ?? e.entityType}</Td>
                     <Td>
@@ -84,13 +85,7 @@ export default function HistoryPage() {
                 ))}
               </tbody>
             </Table>
-            <div className="flex items-center justify-between p-4 text-sm text-oak">
-              <span>{data.total.toLocaleString()} entries</span>
-              <div className="flex gap-2">
-                <Button size="sm" variant="secondary" disabled={page === 1} onClick={() => setPage(page - 1)}>Previous</Button>
-                <Button size="sm" variant="secondary" disabled={page * 100 >= data.total} onClick={() => setPage(page + 1)}>Next</Button>
-              </div>
-            </div>
+            <Pagination page={page} limit={limit} total={data.total} onPage={setPage} onLimit={setLimit} noun="entries" />
           </>
         )}
       </Panel>

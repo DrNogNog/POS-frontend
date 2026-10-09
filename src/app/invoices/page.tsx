@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { useApi, useDebounced, useQueryParam, useSort } from "@/lib/hooks";
 import { date, firstLine, money } from "@/lib/format";
 import type { Invoice } from "@/lib/types";
-import { Badge, Button, Empty, ErrorNote, Field, Input, Loading, PageHeader, Panel, Select, Table, Td, Th } from "@/components/ui";
+import { Badge, Button, Empty, ErrorNote, Field, Input, Loading, PageHeader, Panel, Select, Table, Td, Th, Pagination } from "@/components/ui";
 import { CardBadge, CardTypeFilter, InvoiceStatus } from "@/components/status";
 
 export default function InvoicesPage() {
@@ -20,9 +20,10 @@ export default function InvoicesPage() {
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(25);
   const sort = useSort<"issueDate" | "dueDate" | "total" | "invoiceNo">("issueDate");
   const debounced = useDebounced(q);
-  const params = new URLSearchParams({ page: String(page), limit: "100", sort: sort.sort, dir: sort.dir });
+  const params = new URLSearchParams({ page: String(page), limit: String(limit), sort: sort.sort, dir: sort.dir });
   if (debounced) params.set("q", debounced);
   if (status === "OVERDUE") {
     params.set("status", "UNPAID");
@@ -89,7 +90,7 @@ export default function InvoicesPage() {
               </thead>
               <tbody>
                 {data.items.map((inv) => (
-                  <tr key={inv.id} className="hover:bg-linen/60">
+                  <tr key={inv.id}>
                     <Td><Link href={`/invoices/${inv.id}`} className="font-semibold text-walnut underline">{inv.invoiceNo}</Link></Td>
                     <Td>{date(inv.issueDate)}</Td>
                     <Td>
@@ -113,13 +114,7 @@ export default function InvoicesPage() {
                 ))}
               </tbody>
             </Table>
-            <div className="flex items-center justify-between p-4 text-sm text-oak">
-              <span>{data.total} invoices</span>
-              <div className="flex gap-2">
-                <Button size="sm" variant="secondary" disabled={page === 1} onClick={() => setPage(page - 1)}>Previous</Button>
-                <Button size="sm" variant="secondary" disabled={page * 100 >= data.total} onClick={() => setPage(page + 1)}>Next</Button>
-              </div>
-            </div>
+            <Pagination page={page} limit={limit} total={data.total} onPage={setPage} onLimit={setLimit} noun="invoices" />
           </>
         )}
       </Panel>

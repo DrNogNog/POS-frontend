@@ -17,7 +17,7 @@ import {
   type SelectHTMLAttributes,
   type TextareaHTMLAttributes,
 } from "react";
-import { ChevronDown, ChevronUp, X } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // ---- Buttons ------------------------------------------------------------------
@@ -234,10 +234,23 @@ export function Loading() {
 }
 
 // ---- Tables ---------------------------------------------------------------------------
+/**
+ * Every list (invoices, estimates, approvals, items…) uses this. Rows are
+ * separated by a clear rule line and every other row is lightly shaded, so
+ * each item stands apart.
+ */
 export function Table({ children, className }: { children: ReactNode; className?: string }) {
   return (
     <div className="overflow-x-auto">
-      <table className={cn("w-full border-collapse text-sm", className)}>{children}</table>
+      <table
+        className={cn(
+          "w-full border-collapse text-sm",
+          "[&_tbody_tr:nth-child(even)]:bg-linen/50 [&_tbody_tr]:transition-colors [&_tbody_tr:hover]:bg-maple/15",
+          className
+        )}
+      >
+        {children}
+      </table>
     </div>
   );
 }
@@ -255,7 +268,7 @@ export function Th({
 }) {
   const active = sort && sortKey && sort.sort === sortKey;
   return (
-    <th className={cn("border-b border-hairline bg-linen px-4 py-3 text-left text-sm font-semibold text-walnut first:pl-6 last:pr-6", className)}>
+    <th className={cn("border-b-2 border-oak/30 bg-linen px-4 py-3 text-left text-sm font-semibold text-walnut first:pl-6 last:pr-6", className)}>
       {sortKey && sort ? (
         <button
           type="button"
@@ -272,9 +285,94 @@ export function Th({
   );
 }
 
+/**
+ * Page controls under every list: "Showing 26–50 of 312", rows per page,
+ * and First / Previous / page numbers / Next / Last.
+ */
+export const PAGE_SIZES = [25, 50, 100] as const;
+export function Pagination({
+  page,
+  limit,
+  total,
+  onPage,
+  onLimit,
+  noun = "items",
+}: {
+  page: number;
+  limit: number;
+  total: number;
+  onPage: (p: number) => void;
+  onLimit?: (n: number) => void;
+  /** What the rows are, e.g. "invoices" */
+  noun?: string;
+}) {
+  const pages = Math.max(1, Math.ceil(total / limit));
+  const current = Math.min(page, pages);
+  const from = total ? (current - 1) * limit + 1 : 0;
+  const to = Math.min(total, current * limit);
+  // Page numbers around the current one, with … gaps
+  const nums: (number | "gap")[] = [];
+  for (let p = 1; p <= pages; p++) {
+    if (p === 1 || p === pages || Math.abs(p - current) <= 1) nums.push(p);
+    else if (nums[nums.length - 1] !== "gap") nums.push("gap");
+  }
+  const btn = "inline-flex h-9 min-w-9 items-center justify-center rounded-lux px-2.5 text-sm font-semibold";
+  return (
+    <nav aria-label="Pages" className="flex flex-wrap items-center justify-between gap-3 border-t border-oak/20 px-6 py-3 text-sm text-oak">
+      <div className="flex items-center gap-3">
+        <span>
+          {total ? (
+            <>Showing <b className="num text-walnut">{from.toLocaleString()}–{to.toLocaleString()}</b> of <b className="num text-walnut">{total.toLocaleString()}</b> {noun}</>
+          ) : (
+            <>No {noun}</>
+          )}
+        </span>
+        {onLimit && (
+          <label className="flex items-center gap-2">
+            <span className="hidden sm:inline">Rows per page</span>
+            <select
+              aria-label="Rows per page"
+              className="h-9 rounded-lux border border-hairline bg-white px-2 pr-7 text-sm text-walnut"
+              value={limit}
+              onChange={(e) => { onLimit(Number(e.target.value)); onPage(1); }}
+            >
+              {PAGE_SIZES.map((n) => <option key={n} value={n}>{n}</option>)}
+            </select>
+          </label>
+        )}
+      </div>
+      {pages > 1 && (
+        <div className="flex items-center gap-1">
+          <button type="button" className={cn(btn, "text-walnut hover:bg-linen disabled:opacity-40")} disabled={current === 1} onClick={() => onPage(current - 1)} aria-label="Previous page">
+            <ChevronLeft size={16} />
+          </button>
+          {nums.map((p, i) =>
+            p === "gap" ? (
+              <span key={`g${i}`} className="px-1">…</span>
+            ) : (
+              <button
+                key={p}
+                type="button"
+                aria-current={p === current ? "page" : undefined}
+                className={cn(btn, p === current ? "bg-walnut text-ivory" : "text-walnut hover:bg-linen")}
+                onClick={() => onPage(p)}
+              >
+                {p}
+              </button>
+            )
+          )}
+          <button type="button" className={cn(btn, "text-walnut hover:bg-linen disabled:opacity-40")} disabled={current === pages} onClick={() => onPage(current + 1)} aria-label="Next page">
+            <ChevronRight size={16} />
+          </button>
+        </div>
+      )}
+    </nav>
+  );
+}
+
 export function Td({ children, className, ...rest }: { children?: ReactNode; className?: string; colSpan?: number }) {
   return (
-    <td className={cn("border-b border-hairline/70 px-4 py-3 align-top first:pl-6 last:pr-6", className)} {...rest}>
+    <td className={cn("border-b border-oak/20 px-4 py-3 align-top first:pl-6 last:pr-6", className)} {...rest}>
       {children}
     </td>
   );

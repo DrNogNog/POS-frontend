@@ -36,7 +36,7 @@ export default function CustomersPage() {
             </thead>
             <tbody>
               {data.map((c) => (
-                <tr key={c.id} className="hover:bg-linen/60">
+                <tr key={c.id}>
                   <Td>
                     <Link href={`/customers/${c.id}`} className="font-semibold text-walnut underline">{c.name}</Link>
                     {c.company && <div className="text-xs text-oak">{c.company}</div>}

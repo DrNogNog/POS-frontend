@@ -104,7 +104,7 @@ export default function PurchaseOrdersPage() {
             <thead><tr><Th>PO</Th><Th>Date</Th><Th>Supplier</Th><Th className="text-right">Lines</Th><Th className="text-right">Amount</Th><Th>Status</Th><Th /></tr></thead>
             <tbody>
               {data.map((po) => (
-                <tr key={po.id} className="hover:bg-linen/60">
+                <tr key={po.id}>
                   <Td><button className="font-semibold text-walnut underline" onClick={() => showDetail(po.id)}>{po.poNo}</button></Td>
                   <Td>{date(po.orderDate)}</Td>
                   <Td><Link href={`/suppliers/${po.supplierId}`} className="hover:underline">{po.supplier.name}</Link></Td>
