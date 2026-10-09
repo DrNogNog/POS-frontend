@@ -6,7 +6,7 @@ import { ImagePlus, X } from "lucide-react";
 import { api, imageUrl } from "@/lib/api";
 import { useSession } from "@/lib/session";
 import { usePriceLevels } from "@/lib/privacy";
-import { isoDay, money, n } from "@/lib/format";
+import { isoDay, money, n, units } from "@/lib/format";
 import type { Customer, Product, Supplier } from "@/lib/types";
 import { Button, Checkbox, Field, Input, Modal, Select, Textarea, useAction } from "./ui";
 import { DateInPicker, dateInOf, type DateInValue } from "./DateIn";
@@ -492,15 +492,25 @@ export function ProductForm({
         )}
       </fieldset>
 
-      <div className="mt-5 grid gap-4 sm:grid-cols-4">
-        <Field label="Unit"><Input value={f.unit} onChange={(e) => set("unit", e.target.value)} /></Field>
-        <Field label="Reorder when at or below"><Input type="number" min={0} value={f.reorderPoint} onChange={(e) => set("reorderPoint", e.target.value)} /></Field>
-        <Field label="Usual order quantity"><Input type="number" min={0} value={f.reorderQty} onChange={(e) => set("reorderQty", e.target.value)} /></Field>
-        {!product && (
-          <Field label="Opening stock" hint="Counted on hand now"><Input type="number" min={0} value={f.openingQty} onChange={(e) => set("openingQty", e.target.value)} /></Field>
-        )}
-        <DateInPicker value={dateIn} onChange={setDateIn} id="product-date-in" />
-      </div>
+      <fieldset className="mt-5 rounded-lux border border-hairline px-5 py-5">
+        <legend className="px-2 font-display text-lg font-semibold text-walnut">Stock</legend>
+        <div className="grid gap-4 sm:grid-cols-4">
+          {product ? (
+            <div>
+              <span className="mb-1.5 block text-sm font-semibold text-walnut">Units in stock</span>
+              <div className="flex h-11 items-center rounded-lux border border-hairline bg-linen/60 px-3.5 font-semibold text-walnut">{units(product.qtyOnHand)}</div>
+              <span className="mt-1 block text-xs text-oak">Change it with &ldquo;Adjust stock&rdquo;.</span>
+            </div>
+          ) : (
+            <Field label="Units in stock now" hint="How many you have on hand">
+              <Input type="number" min={0} step="any" placeholder="0" value={f.openingQty} onChange={(e) => set("openingQty", e.target.value)} />
+            </Field>
+          )}
+          <DateInPicker value={dateIn} onChange={setDateIn} id="product-date-in" />
+          <Field label="Reorder when at or below" hint="Units"><Input type="number" min={0} value={f.reorderPoint} onChange={(e) => set("reorderPoint", e.target.value)} /></Field>
+          <Field label="Usual order quantity" hint="Units"><Input type="number" min={0} value={f.reorderQty} onChange={(e) => set("reorderQty", e.target.value)} /></Field>
+        </div>
+      </fieldset>
       <div className="mt-4"><Checkbox label="Charge sales tax" checked={f.taxable} onChange={(v) => set("taxable", v)} /></div>
 
       <fieldset className="mt-5 rounded-lux border border-hairline px-5 py-5">

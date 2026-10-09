@@ -268,7 +268,7 @@ export function Th({
 }) {
   const active = sort && sortKey && sort.sort === sortKey;
   return (
-    <th className={cn("border-b-2 border-oak/30 bg-linen px-4 py-3 text-left text-sm font-semibold text-walnut first:pl-6 last:pr-6", className)}>
+    <th className={cn("border-b-2 border-r border-oak/25 border-b-oak/40 bg-linen px-4 py-3 text-left text-sm font-semibold text-walnut first:pl-6 last:border-r-0 last:pr-6", className)}>
       {sortKey && sort ? (
         <button
           type="button"
@@ -372,7 +372,7 @@ export function Pagination({
 
 export function Td({ children, className, ...rest }: { children?: ReactNode; className?: string; colSpan?: number }) {
   return (
-    <td className={cn("border-b border-oak/20 px-4 py-3 align-top first:pl-6 last:pr-6", className)} {...rest}>
+    <td className={cn("border-b border-r border-oak/25 px-4 py-3 align-top first:pl-6 last:border-r-0 last:pr-6", className)} {...rest}>
       {children}
     </td>
   );
