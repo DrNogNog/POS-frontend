@@ -10,7 +10,7 @@ import { usePriceLevels } from "@/lib/privacy";
 import { date, dateTime, isoDay, money, n, qty, termsLabel } from "@/lib/format";
 import type { Invoice } from "@/lib/types";
 import { Button, ErrorNote, Field, Input, Loading, Modal, PageHeader, Panel, Table, Td, Th, Textarea, useAction } from "@/components/ui";
-import { InvoiceStatus } from "@/components/status";
+import { CardBadge, InvoiceStatus } from "@/components/status";
 import { PaymentDialog } from "@/components/forms";
 import { ItemCode } from "@/components/ItemCode";
 
@@ -98,6 +98,8 @@ export default function InvoicePage() {
               <div>
                 <div className="text-oak">Salesperson</div>
                 {inv.salesperson}
+                <div className="mt-3 text-oak">Paying by</div>
+                <CardBadge type={inv.cardType} />
               </div>
             </div>
           </Panel>

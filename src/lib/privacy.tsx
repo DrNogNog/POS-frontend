@@ -6,8 +6,11 @@
 // markups, our cost and our margins are HIDDEN by default. Staff click
 // "Price levels" in the top bar when they need them, and hide them again
 // when a customer walks up. The choice is remembered on this computer only.
+// Worker logins never see them.
 // -----------------------------------------------------------------------------
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
+
+import { useSession } from "./session";
 
 const KEY = "pos.showPriceLevels";
 
@@ -47,7 +50,13 @@ export function PriceLevelsProvider({ children }: { children: ReactNode }) {
       /* ignore */
     }
   }, []);
-  return <PriceLevelsContext.Provider value={{ show, toggle, hide }}>{children}</PriceLevelsContext.Provider>;
+  const { user } = useSession();
+  const allowed = user?.role !== "WORKER";
+  return (
+    <PriceLevelsContext.Provider value={{ show: show && allowed, toggle: allowed ? toggle : hide, hide }}>
+      {children}
+    </PriceLevelsContext.Provider>
+  );
 }
 
 /** Renders its children only while price levels are shown. */

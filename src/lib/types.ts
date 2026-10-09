@@ -1,7 +1,9 @@
 // Shapes of the data the API sends back. Money arrives as strings.
 export type Money = string | number;
 
-export type Role = "OWNER" | "MANAGER" | "ACCOUNTANT" | "CASHIER";
+export type Role = "OWNER" | "MANAGER" | "ACCOUNTANT" | "CASHIER" | "WORKER";
+/** How the customer is paying — recorded on estimates and invoices. */
+export type CardType = "CREDIT" | "DEBIT";
 
 export interface User {
   id: number;
@@ -182,6 +184,7 @@ export interface Invoice {
   shipTo: string;
   phone: string;
   fax: string;
+  cardType: CardType | null;
   fulfillment: "PICKUP" | "DELIVERY";
   salesperson: string;
   subtotal: Money;
@@ -223,6 +226,7 @@ export interface Estimate {
   shipTo: string;
   phone: string;
   fax: string;
+  cardType: CardType | null;
   fulfillment: "PICKUP" | "DELIVERY";
   priceTierCode: string;
   subtotal: Money;

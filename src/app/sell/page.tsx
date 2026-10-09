@@ -18,7 +18,7 @@ import { useQueryParam } from "@/lib/hooks";
 import { Private, usePriceLevels } from "@/lib/privacy";
 import { useSession } from "@/lib/session";
 import { money, n, qty, termsLabel } from "@/lib/format";
-import type { Customer, Estimate, Invoice, Product } from "@/lib/types";
+import type { CardType, Customer, Estimate, Invoice, Product } from "@/lib/types";
 
 /** From /products/availability: on hand, promised on estimates, and what's left. */
 interface Availability {
@@ -64,6 +64,7 @@ interface Draft {
   shipTo: string;
   phone?: string;
   fax?: string;
+  cardType?: CardType | null;
   fulfillment: "PICKUP" | "DELIVERY";
   notes: string;
   termsDays: number;
@@ -93,7 +94,9 @@ function clearDraft(storeId: string) {
 
 export default function SellPage() {
   const router = useRouter();
-  const { settings, store } = useSession();
+  const { settings, store, user } = useSession();
+  // Worker logins only make estimates — no invoicing, payments or price levels
+  const isWorker = user?.role === "WORKER";
   const { show: showLevels } = usePriceLevels();
   const estimateParam = useQueryParam("estimate");
   const customerParam = useQueryParam("customer");
@@ -112,6 +115,11 @@ export default function SellPage() {
   const [billTo, setBillTo] = useState("");
   const [phone, setPhone] = useState("");
   const [fax, setFax] = useState("");
+  const [cardType, setCardTypeState] = useState<CardType | null>(null);
+  const setCardType = (c: CardType | null) => {
+    setCardTypeState(c);
+    if (c) setPayMethod(c); // a payment taken now defaults to the same card
+  };
   const [shipTo, setShipTo] = useState("");
   const [fulfillment, setFulfillment] = useState<"PICKUP" | "DELIVERY">("PICKUP");
   const [notes, setNotes] = useState("");
@@ -141,6 +149,7 @@ export default function SellPage() {
     setBillTo(d?.billTo ?? "");
     setPhone(d?.phone ?? "");
     setFax(d?.fax ?? "");
+    setCardTypeState(d?.cardType ?? null);
     setShipTo(d?.shipTo ?? "");
     setFulfillment(d?.fulfillment ?? "PICKUP");
     setNotes(d?.notes ?? "");
@@ -161,7 +170,7 @@ export default function SellPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [store?.id]);
   const draft: Draft = {
-    customer, lines, tier, discountMode, discountInput, taxRateId, billTo, shipTo, phone, fax, fulfillment, notes,
+    customer, lines, tier, discountMode, discountInput, taxRateId, billTo, shipTo, phone, fax, cardType, fulfillment, notes,
     termsDays, payNow, payAmount, payMethod, payRef, allowBackorder, saveAnyway,
   };
   const draftJson = JSON.stringify(draft);
@@ -209,6 +218,7 @@ export default function SellPage() {
       setBillTo(est.billTo);
       setPhone(est.phone ?? "");
       setFax(est.fax ?? "");
+      setCardTypeState(est.cardType ?? null);
       setShipTo(est.shipTo);
       setFulfillment(est.fulfillment);
       setNotes(est.notes);
@@ -367,6 +377,7 @@ export default function SellPage() {
       shipTo,
       phone,
       fax,
+      cardType,
       fulfillment,
       priceTierCode: tier,
       discountAmount: totals.discount,
@@ -392,7 +403,7 @@ export default function SellPage() {
         discarded.current = true;
         clearDraft(store.id);
       }
-      router.push(`/estimates?open=${est.id}`);
+      router.push(isWorker ? "/approvals" : `/estimates?open=${est.id}`);
     }
   }
 
@@ -419,14 +430,24 @@ export default function SellPage() {
   }
 
   const hasLines = lines.some((l) => n(l.qty) > 0 && (l.productId || l.description.trim()));
-  const canSave = !!customer && hasLines;
-  const whyNot = !customer ? "Pick or add a customer first." : !hasLines ? "Add at least one item." : "";
+  const canSave = !!customer && hasLines && !!cardType;
+  const whyNot = !customer
+    ? "Pick or add a customer first."
+    : !hasLines
+      ? "Add at least one item."
+      : !cardType
+        ? "Choose credit or debit."
+        : "";
 
   return (
     <>
       <PageHeader
-        title={editingEstimate ? `Edit estimate ${editingEstimate.estimateNo}` : "New sale or estimate"}
-        subtitle="Pick the customer, add items, then save an estimate or invoice now."
+        title={editingEstimate ? `Edit estimate ${editingEstimate.estimateNo}` : isWorker ? "New estimate" : "New sale or estimate"}
+        subtitle={
+          isWorker
+            ? "Pick the customer, add items, choose credit or debit, then save. A manager approves it on the Approvals screen."
+            : "Pick the customer, add items, then save an estimate or invoice now."
+        }
         actions={
           !editingEstimate && (customer || lines.length > 0) && (
             <Button variant="ghost" onClick={startOver}><RotateCcw size={16} /> Start over</Button>
@@ -622,9 +643,29 @@ export default function SellPage() {
             </dl>
           </Panel>
 
-          <Panel title={editingEstimate ? "Save the estimate" : "Finish"}>
+          <Panel title={editingEstimate || isWorker ? "Save the estimate" : "Finish"}>
             <div className="space-y-4">
-              {!editingEstimate && (
+              <div>
+                <span className="mb-1.5 block text-sm font-semibold text-walnut">Paying by</span>
+                <div role="radiogroup" aria-label="Paying by" className="grid grid-cols-2 overflow-hidden rounded-lux border border-hairline bg-white">
+                  {(["CREDIT", "DEBIT"] as const).map((c) => (
+                    <button
+                      key={c}
+                      type="button"
+                      role="radio"
+                      aria-checked={cardType === c}
+                      onClick={() => setCardType(c)}
+                      className={cn(
+                        "h-11 text-base font-semibold",
+                        cardType === c ? "bg-walnut text-ivory" : "text-walnut hover:bg-linen"
+                      )}
+                    >
+                      {c === "CREDIT" ? "Credit" : "Debit"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              {!editingEstimate && !isWorker && (
                 <>
                   <p className="text-sm text-oak">
                     <b className="text-walnut">Estimate</b> — a quote the customer approves later on the Approvals screen.{" "}
@@ -685,7 +726,7 @@ export default function SellPage() {
                   </ul>
                   <div className="mt-3 space-y-2">
                     <Checkbox label="Save estimate anyway" checked={saveAnyway} onChange={setSaveAnyway} />
-                    {!editingEstimate && <Checkbox label="Special order — sell anyway" checked={allowBackorder} onChange={setAllowBackorder} />}
+                    {!editingEstimate && !isWorker && <Checkbox label="Special order — sell anyway" checked={allowBackorder} onChange={setAllowBackorder} />}
                   </div>
                 </div>
               )}
@@ -694,7 +735,7 @@ export default function SellPage() {
                 <Button variant="secondary" className="w-full" onClick={saveEstimate} busy={busy} disabled={!canSave || (short.length > 0 && !saveAnyway)}>
                   {editingEstimate ? "Save changes to estimate" : "Save estimate"}
                 </Button>
-                {!editingEstimate && (
+                {!editingEstimate && !isWorker && (
                   <Button className="w-full" onClick={invoiceNow} busy={busy} disabled={!canSave || payTooMuch || (short.length > 0 && !allowBackorder)}>
                     Create invoice
                   </Button>

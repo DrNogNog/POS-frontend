@@ -203,6 +203,8 @@ function Users() {
     <Panel title="People who can log in to this store" className="max-w-3xl" padded={false} actions={<Button size="sm" onClick={() => setEdit({ role: "CASHIER", active: true })}>Add user</Button>}>
       <p className="px-5 pt-4 text-sm text-oak">
         Owner: everything. Manager: everything except users. Accountant: books, receivables, payables, payroll. Cashier: sales and customers.
+        Worker: creates estimates and sees the approvals list — can&apos;t approve, invoice or see costs. The worker login is set in the
+        backend&apos;s <b>.env</b> file (WORKER_EMAIL / WORKER_PASSWORD) and applied when the server starts.
         Logins are saved on this store&apos;s drive — to use another store, add the person there too.
       </p>
       <Table>
@@ -212,8 +214,10 @@ function Users() {
             <tr key={u.id}>
               <Td>{u.name} {!u.active && <Badge>Disabled</Badge>}</Td>
               <Td>{u.email}</Td>
-              <Td>{u.role.toLowerCase()}</Td>
-              <Td className="text-right"><Button size="sm" variant="ghost" onClick={() => setEdit(u)}>Edit</Button></Td>
+              <Td>{u.role.toLowerCase()}{u.role === "WORKER" && <span className="ml-2"><Badge>set in .env</Badge></span>}</Td>
+              <Td className="text-right">
+                {u.role !== "WORKER" && <Button size="sm" variant="ghost" onClick={() => setEdit(u)}>Edit</Button>}
+              </Td>
             </tr>
           ))}
         </tbody>

@@ -1,7 +1,35 @@
 "use client";
 // Status labels used across invoices, bills and estimates.
-import { Badge } from "./ui";
-import type { Bill, Estimate, Invoice } from "@/lib/types";
+import { CreditCard } from "lucide-react";
+import { Badge, Select } from "./ui";
+import type { Bill, CardType, Estimate, Invoice } from "@/lib/types";
+
+/** "Credit" / "Debit" label — how the customer is paying. */
+export function CardBadge({ type }: { type: CardType | null | undefined }) {
+  if (!type) return <span className="text-sm text-oak">—</span>;
+  return (
+    <span
+      className={
+        "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-semibold " +
+        (type === "CREDIT" ? "border-walnut/30 bg-walnut/10 text-walnut" : "border-brass/40 bg-brass/10 text-oak")
+      }
+    >
+      <CreditCard size={12} aria-hidden /> {type === "CREDIT" ? "Credit" : "Debit"}
+    </span>
+  );
+}
+
+/** Filter dropdown for lists: all / credit / debit / not recorded. Sends ?cardType=. */
+export function CardTypeFilter({ value, onChange, className }: { value: string; onChange: (v: string) => void; className?: string }) {
+  return (
+    <Select className={className} value={value} onChange={(e) => onChange(e.target.value)} aria-label="Credit or debit">
+      <option value="">Credit and debit</option>
+      <option value="CREDIT">Credit only</option>
+      <option value="DEBIT">Debit only</option>
+      <option value="NONE">Not recorded</option>
+    </Select>
+  );
+}
 
 export function InvoiceStatus({ inv }: { inv: Pick<Invoice, "status" | "collectionStatus" | "isOverdue" | "daysPastDue"> }) {
   if (inv.status === "VOID") return <Badge>Void</Badge>;

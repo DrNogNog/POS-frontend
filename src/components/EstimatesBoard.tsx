@@ -7,20 +7,25 @@ import { useEffect, useState } from "react";
 import { api, openPdf } from "@/lib/api";
 import { useApi, useDebounced, useQueryParam, useSort } from "@/lib/hooks";
 import { Private } from "@/lib/privacy";
+import { useSession } from "@/lib/session";
 import { date, firstLine, money, n } from "@/lib/format";
 import type { Estimate, Invoice } from "@/lib/types";
 import { Button, Checkbox, Empty, ErrorNote, Field, Input, Loading, Modal, Panel, Select, Table, Td, Th, useAction } from "./ui";
-import { EstimateStatus } from "./status";
+import { CardBadge, CardTypeFilter, EstimateStatus } from "./status";
 import { ItemCode } from "./ItemCode";
 
 export default function EstimatesBoard({ statuses }: { statuses?: Estimate["status"][] }) {
   const router = useRouter();
+  const { user } = useSession();
+  // Workers can look but not approve, reject or invoice
+  const isWorker = user?.role === "WORKER";
   const [q, setQ] = useState("");
+  const [cardType, setCardType] = useState("");
   const [status, setStatus] = useState(statuses?.length === 1 ? statuses[0] : "");
   const debounced = useDebounced(q);
   const sort = useSort<"date" | "total" | "estimateNo">("date");
   const { data, error, loading, reload } = useApi<Estimate[]>(
-    `/estimates?${sort.query}&q=${encodeURIComponent(debounced)}${status ? `&status=${status}` : ""}`
+    `/estimates?${sort.query}&q=${encodeURIComponent(debounced)}${status ? `&status=${status}` : ""}${cardType ? `&cardType=${cardType}` : ""}`
   );
   const rows = (data ?? []).filter((e) => !statuses || statuses.includes(e.status));
   const { busy, run } = useAction();
@@ -64,6 +69,7 @@ export default function EstimatesBoard({ statuses }: { statuses?: Estimate["stat
       <Panel padded={false}>
         <div className="flex flex-wrap gap-3 p-4">
           <Input className="max-w-sm" placeholder="Search estimate # or customer…" value={q} onChange={(e) => setQ(e.target.value)} />
+          <CardTypeFilter className="max-w-56" value={cardType} onChange={setCardType} />
           {!statuses && (
             <Select className="max-w-xs" value={status} onChange={(e) => setStatus(e.target.value as Estimate["status"])}>
               <option value="">All estimates</option>
@@ -87,6 +93,7 @@ export default function EstimatesBoard({ statuses }: { statuses?: Estimate["stat
                 <Th sortKey="date" sort={sort}>Date</Th>
                 <Th>Customer</Th>
                 <Th sortKey="total" sort={sort} className="text-right">Total</Th>
+                <Th>Paying by</Th>
                 <Th>Status</Th>
                 <Th className="text-right">Actions</Th>
               </tr>
@@ -100,6 +107,7 @@ export default function EstimatesBoard({ statuses }: { statuses?: Estimate["stat
                   <Td>{date(e.date)}</Td>
                   <Td>{e.customer?.name ?? firstLine(e.billTo) ?? "—"}</Td>
                   <Td className="num font-medium">{money(e.total)}</Td>
+                  <Td><CardBadge type={e.cardType} /></Td>
                   <Td>
                     <EstimateStatus status={e.status} />
                     {e.invoice && (
@@ -109,10 +117,10 @@ export default function EstimatesBoard({ statuses }: { statuses?: Estimate["stat
                   <Td className="text-right">
                     <div className="flex justify-end gap-2">
                       <Button size="sm" variant="ghost" onClick={() => openPdf(`/estimates/${e.id}/pdf`)}>PDF</Button>
-                      {e.status === "PENDING" && (
+                      {!isWorker && e.status === "PENDING" && (
                         <Button size="sm" variant="success" busy={busy} onClick={() => setEstimateStatus(e.id, "APPROVED")}>Approve</Button>
                       )}
-                      {e.status === "APPROVED" && <Button size="sm" onClick={() => startConvert(e)}>Make invoice</Button>}
+                      {!isWorker && e.status === "APPROVED" && <Button size="sm" onClick={() => startConvert(e)}>Make invoice</Button>}
                     </div>
                   </Td>
                 </tr>
@@ -131,17 +139,17 @@ export default function EstimatesBoard({ statuses }: { statuses?: Estimate["stat
           detail && (
             <>
               <Button variant="ghost" onClick={() => openPdf(`/estimates/${detail.id}/pdf`)}>Open PDF</Button>
-              {detail.status !== "INVOICED" && (
+              {(isWorker ? detail.status === "PENDING" : detail.status !== "INVOICED") && (
                 <Link href={`/sell?estimate=${detail.id}`}><Button variant="secondary">Edit</Button></Link>
               )}
-              {detail.status === "PENDING" && (
+              {!isWorker && detail.status === "PENDING" && (
                 <>
                   <Button variant="danger" onClick={() => setEstimateStatus(detail.id, "REJECTED")}>Customer said no</Button>
                   <Button variant="success" onClick={() => setEstimateStatus(detail.id, "APPROVED")}>Approve</Button>
                 </>
               )}
-              {detail.status === "REJECTED" && <Button variant="secondary" onClick={() => setEstimateStatus(detail.id, "PENDING")}>Reopen</Button>}
-              {detail.status === "APPROVED" && <Button onClick={() => { const d = detail; setDetail(null); void startConvert(d); }}>Make invoice</Button>}
+              {!isWorker && detail.status === "REJECTED" && <Button variant="secondary" onClick={() => setEstimateStatus(detail.id, "PENDING")}>Reopen</Button>}
+              {!isWorker && detail.status === "APPROVED" && <Button onClick={() => { const d = detail; setDetail(null); void startConvert(d); }}>Make invoice</Button>}
             </>
           )
         }
@@ -151,6 +159,7 @@ export default function EstimatesBoard({ statuses }: { statuses?: Estimate["stat
             <div className="mb-4 flex flex-wrap gap-6 text-sm">
               <div><div className="text-oak">Date</div>{date(detail.date)}</div>
               <div><div className="text-oak">Status</div><EstimateStatus status={detail.status} /></div>
+              <div><div className="text-oak">Paying by</div><CardBadge type={detail.cardType} /></div>
               <Private><div><div className="text-oak">Price level</div>{detail.priceTierCode}</div></Private>
               <div><div className="text-oak">Fulfillment</div>{detail.fulfillment === "DELIVERY" ? "Delivery" : "Pickup"}</div>
             </div>

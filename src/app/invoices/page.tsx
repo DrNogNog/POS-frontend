@@ -6,7 +6,7 @@ import { useApi, useDebounced, useQueryParam, useSort } from "@/lib/hooks";
 import { date, firstLine, money } from "@/lib/format";
 import type { Invoice } from "@/lib/types";
 import { Badge, Button, Empty, ErrorNote, Field, Input, Loading, PageHeader, Panel, Select, Table, Td, Th } from "@/components/ui";
-import { InvoiceStatus } from "@/components/status";
+import { CardBadge, CardTypeFilter, InvoiceStatus } from "@/components/status";
 
 export default function InvoicesPage() {
   const [q, setQ] = useState("");
@@ -16,6 +16,7 @@ export default function InvoicesPage() {
     if (statusParam) setStatus(statusParam);
   }, [statusParam]);
   const [approval, setApproval] = useState(""); // "" | needed | none
+  const [cardType, setCardType] = useState(""); // "" | CREDIT | DEBIT | NONE
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [page, setPage] = useState(1);
@@ -28,6 +29,7 @@ export default function InvoicesPage() {
     params.set("overdue", "true");
   } else if (status) params.set("status", status);
   if (approval) params.set("approval", approval);
+  if (cardType) params.set("cardType", cardType);
   if (from) params.set("from", from);
   if (to) params.set("to", to);
   const { data, error, loading } = useApi<{ items: Invoice[]; total: number }>(`/invoices?${params}`);
@@ -40,7 +42,7 @@ export default function InvoicesPage() {
         actions={<Link href="/sell"><Button>New sale</Button></Link>}
       />
       <Panel padded={false}>
-        <div className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
+        <div className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-4 2xl:grid-cols-7">
           <Field label="Search"><Input placeholder="Invoice # or customer" value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} /></Field>
           <Field label="Show">
             <Select value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }}>
@@ -57,6 +59,9 @@ export default function InvoicesPage() {
               <option value="needed">Needed approval (from an estimate)</option>
               <option value="none">No approval (direct sale)</option>
             </Select>
+          </Field>
+          <Field label="Paying by">
+            <CardTypeFilter value={cardType} onChange={(v) => { setCardType(v); setPage(1); }} />
           </Field>
           <Field label="From"><Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></Field>
           <Field label="To"><Input type="date" value={to} onChange={(e) => setTo(e.target.value)} /></Field>
@@ -75,6 +80,7 @@ export default function InvoicesPage() {
                   <Th sortKey="issueDate" sort={sort}>Date</Th>
                   <Th>Customer</Th>
                   <Th>Approval</Th>
+                  <Th>Paying by</Th>
                   <Th sortKey="dueDate" sort={sort}>Due</Th>
                   <Th sortKey="total" sort={sort} className="text-right">Total</Th>
                   <Th className="text-right">Balance</Th>
@@ -98,6 +104,7 @@ export default function InvoicesPage() {
                         <Badge>Not needed</Badge>
                       )}
                     </Td>
+                    <Td><CardBadge type={inv.cardType} /></Td>
                     <Td>{inv.termsDays === 0 ? "On receipt" : date(inv.dueDate)}</Td>
                     <Td className="num">{money(inv.total)}</Td>
                     <Td className="num font-medium">{money(inv.balance)}</Td>

@@ -45,8 +45,15 @@ interface NavItem {
   href: string;
   label: string;
   icon: LucideIcon;
-  roles?: Role[]; // who can see it (OWNER always can)
+  roles?: Role[]; // who can see it (OWNER always can; WORKER never, unless listed below)
 }
+
+/** A worker login sees only these two screens. */
+const WORKER_NAV: NavItem[] = [
+  { href: "/sell", label: "New estimate", icon: ShoppingCart },
+  { href: "/approvals", label: "Approvals", icon: ClipboardCheck },
+];
+const WORKER_PATHS = WORKER_NAV.map((i) => i.href);
 
 const NAV: { group: string; items: NavItem[] }[] = [
   { group: "", items: [{ href: "/", label: "Dashboard", icon: Home }] },
@@ -130,6 +137,13 @@ export default function AppShell({ children }: { children: ReactNode }) {
 
   useEffect(() => setMenuOpen(false), [pathname]);
 
+  // Workers only get the estimate and approvals screens
+  const isWorker = user?.role === "WORKER";
+  const workerBlocked = isWorker && !isLogin && !WORKER_PATHS.some((p) => pathname.startsWith(p));
+  useEffect(() => {
+    if (workerBlocked) router.replace("/sell");
+  }, [workerBlocked, router]);
+
   useEffect(() => {
     try {
       setNavHidden(window.localStorage.getItem(NAV_KEY) === "1");
@@ -149,7 +163,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
   };
 
   if (isLogin) return <>{children}</>;
-  if (loading || !user) {
+  if (loading || !user || workerBlocked) {
     return <div className="flex min-h-screen items-center justify-center text-oak">Loading…</div>;
   }
 
@@ -167,13 +181,13 @@ export default function AppShell({ children }: { children: ReactNode }) {
         )}
       >
         <div className="px-4 pb-2 pt-4">
-          <Link href="/" className="block overflow-hidden rounded-lux bg-white/95">
+          <Link href={isWorker ? "/sell" : "/"} className="block overflow-hidden rounded-lux bg-white/95">
             <Image src="/Champion.png" alt="Champion Point of Sale" width={448} height={381} className="h-auto w-full" priority />
           </Link>
         </div>
         <nav className="px-3 pb-6" aria-label="Main menu">
-          {NAV.map((g) => {
-            const items = g.items.filter((i) => !i.roles || can(...i.roles));
+          {(isWorker ? [{ group: "", items: WORKER_NAV }] : NAV).map((g) => {
+            const items = isWorker ? g.items : g.items.filter((i) => !i.roles || can(...i.roles));
             if (!items.length) return null;
             return (
               <div key={g.group || "home"} className="mb-2">
@@ -216,6 +230,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
             <StoreLogo />
           </div>
           <div className="flex items-center gap-2 text-sm">
+{!isWorker && (
             <button
               onClick={levels.toggle}
               aria-pressed={levels.show}
@@ -228,6 +243,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
               {levels.show ? <Eye size={16} /> : <EyeOff size={16} />}
               Price levels
             </button>
+            )}
             <span className="hidden px-2 text-oak xl:inline">
               {user.name} <span className="text-oak/70">({user.role.toLowerCase()})</span>
             </span>
