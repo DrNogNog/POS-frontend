@@ -1,7 +1,7 @@
 "use client";
 // Items & stock: every product with price in, price out and quantity on hand.
 import Link from "next/link";
-import { PackagePlus, Pencil } from "lucide-react";
+import { PackagePlus, Pencil, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useApi, useDebounced, useSort } from "@/lib/hooks";
 import { useSession } from "@/lib/session";
@@ -14,6 +14,7 @@ import { ProductForm } from "@/components/forms";
 import { ImportDialog } from "@/components/ImportDialog";
 import { DateInLabel } from "@/components/DateIn";
 import { AdjustStockDialog } from "@/components/AdjustStockDialog";
+import { DeleteItemDialog } from "@/components/DeleteItemDialog";
 
 export default function ProductsPage() {
   const { settings, can, user } = useSession();
@@ -54,6 +55,7 @@ export default function ProductsPage() {
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<Product | null>(null);
   const [adjusting, setAdjusting] = useState<Product | null>(null);
+  const [deleting, setDeleting] = useState<Product | null>(null);
   const manager = can("MANAGER");
   const [importing, setImporting] = useState(false);
 
@@ -151,6 +153,9 @@ export default function ProductsPage() {
                           <Button size="sm" variant="ghost" onClick={() => setAdjusting(p)} aria-label={`Adjust stock of ${p.itemCode}`}>
                             <PackagePlus size={15} /> Adjust stock
                           </Button>
+                          <Button size="sm" variant="ghost" className="text-late hover:bg-late/10" onClick={() => setDeleting(p)} aria-label={`Delete ${p.itemCode}`}>
+                            <Trash2 size={15} /> Delete
+                          </Button>
                         </Td>
                       )}
                     </tr>
@@ -166,6 +171,7 @@ export default function ProductsPage() {
       <ProductForm open={!!editing} product={editing} onClose={() => setEditing(null)} onSaved={() => reload()} />
       <AdjustStockDialog item={adjusting} onClose={() => setAdjusting(null)} onDone={() => reload()} />
       <ImportDialog open={importing} onClose={() => setImporting(false)} onDone={() => reload()} />
+      <DeleteItemDialog product={deleting} onClose={() => setDeleting(null)} onDeleted={() => { setDeleting(null); reload(); }} />
     </>
   );
 }

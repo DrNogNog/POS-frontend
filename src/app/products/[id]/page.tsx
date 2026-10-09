@@ -16,6 +16,7 @@ import { CodeExplanation } from "@/components/ItemCode";
 import { ProductForm } from "@/components/forms";
 import { DateInLabel } from "@/components/DateIn";
 import { AdjustStockDialog } from "@/components/AdjustStockDialog";
+import { DeleteItemDialog } from "@/components/DeleteItemDialog";
 
 interface Detail extends Product {
   supplier: Supplier | null;
@@ -33,7 +34,6 @@ const MOVE_LABEL: Record<string, string> = {
   ADJUST_OUT: "Removed (damage / count)",
   RETURN_IN: "Returned / void",
 };
-
 export default function ProductPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
@@ -43,6 +43,7 @@ export default function ProductPage() {
   const { data: p, error, reload } = useApi<Detail>(`/products/${id}`);
   const [editing, setEditing] = useState(false);
   const [adjusting, setAdjusting] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   // Opened from the list with ?adjust=1 or ?edit=1
   const adjustParam = useQueryParam("adjust");
   const editParam = useQueryParam("edit");
@@ -69,6 +70,7 @@ export default function ProductPage() {
         actions={
           can("MANAGER") && (
             <>
+              <Button variant="danger" onClick={() => setDeleting(true)}>Delete item</Button>
               <Button variant="secondary" onClick={() => setAdjusting(true)}>Adjust stock</Button>
               <Button onClick={() => setEditing(true)}>Edit item</Button>
             </>
@@ -185,6 +187,7 @@ export default function ProductPage() {
 
       <ProductForm open={editing} onClose={() => setEditing(false)} product={p} onSaved={() => reload()} />
       <AdjustStockDialog item={adjusting ? p : null} onClose={() => setAdjusting(false)} onDone={() => reload()} />
+      <DeleteItemDialog product={deleting ? p : null} onClose={() => setDeleting(false)} onDeleted={() => router.push("/products")} />
     </>
   );
 }
