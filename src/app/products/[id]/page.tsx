@@ -74,17 +74,21 @@ export default function ProductPage() {
           )
         }
       />
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className={`grid gap-4 sm:grid-cols-2 ${showLevels ? "xl:grid-cols-5" : "xl:grid-cols-4"}`}>
         <Stat label="On hand" value={units(p.qtyOnHand)} tone={n(p.reorderPoint) > 0 && n(p.qtyOnHand) <= n(p.reorderPoint) ? "late" : "ink"} note={n(p.reorderPoint) ? `Reorder at ${qty(p.reorderPoint)}` : undefined} />
+        <Stat
+          label={showLevels ? `Selling price (${p.prices[p.prices.length - 1]?.tier ?? ""})` : "Selling price"}
+          value={n(p.prices[p.prices.length - 1]?.price) > 0 ? money(p.prices[p.prices.length - 1]?.price) : "Not set"}
+          tone={n(p.prices[p.prices.length - 1]?.price) > 0 ? "ink" : "late"}
+          note={p.sellPriceOverride ? "Fixed price" : n(p.prices[p.prices.length - 1]?.price) > 0 ? undefined : "Add a cost or a fixed selling price"}
+        />
         {showLevels ? (
           <>
             <Stat label="Price in (standard cost)" value={money(p.unitCost)} note={n(p.listPrice) ? `List ${money(p.listPrice)} less ${n(p.supplierDiscountPct)}%` : undefined} />
             <Stat label="Weighted average cost" value={money(p.weightedAverageCost)} note="Of the units on hand" />
             <Stat label="Stock value" value={money(p.stockValue)} />
           </>
-        ) : (
-          <Stat label="Price" value={money(p.prices[p.prices.length - 1]?.price)} note="Costs and price levels are hidden" />
-        )}
+        ) : null}
       </div>
 
       <div className="mt-6 grid gap-6 xl:grid-cols-2">

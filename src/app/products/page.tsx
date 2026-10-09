@@ -122,7 +122,7 @@ export default function ProductsPage() {
                   <Th sortKey="supplier" sort={sort}>Supplier</Th>
                   {showLevels && <Th className="text-right">List</Th>}
                   {showLevels && <Th sortKey="unitCost" sort={sort} className="text-right">Price in</Th>}
-                  <Th sortKey="price" sort={sort} className="text-right">{showLevels ? `Price out (${tier})` : "Price"}</Th>
+                  <Th sortKey="price" sort={sort} className="text-right">{showLevels ? `Selling price (${tier})` : "Selling price"}</Th>
                   <Th sortKey="qtyOnHand" sort={sort} className="text-right">On hand</Th>
                   <Th sortKey="dateIn" sort={sort}>Date in</Th>
                   {manager && <Th className="text-right">Change</Th>}
@@ -143,7 +143,12 @@ export default function ProductsPage() {
                       <Td>{p.supplier?.name ?? "—"}</Td>
                       {showLevels && <Td className="num text-oak">{n(p.listPrice) ? money(p.listPrice) : "—"}</Td>}
                       {showLevels && <Td className="num">{money(cost)}{n(p.supplierDiscountPct) > 0 && <div className="text-xs text-oak">{n(p.supplierDiscountPct)}% off list</div>}</Td>}
-                      <Td className="num font-medium">{money(price)}</Td>
+                      <Td className="num font-medium">
+                        {price > 0 ? money(price) : manager ? (
+                          <button type="button" onClick={() => setEditing(p)} className="text-late underline-offset-2 hover:underline" title="No cost or fixed selling price on this item yet">Not set</button>
+                        ) : <span className="text-late">Not set</span>}
+                        {p.sellPriceOverride && n(p.sellPriceOverride) > 0 && <div className="text-xs font-normal text-oak">fixed price</div>}
+                      </Td>
                       <Td className={`num font-medium ${low ? "text-late" : ""}`}>{units(p.qtyOnHand)}</Td>
                       <Td className="whitespace-nowrap"><DateInLabel p={p} /></Td>
                       {manager && (
