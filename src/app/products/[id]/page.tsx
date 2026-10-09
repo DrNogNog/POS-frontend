@@ -37,7 +37,8 @@ const MOVE_LABEL: Record<string, string> = {
 export default function ProductPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
-  const { can } = useSession();
+  const { can, user } = useSession();
+  const showCost = user?.role !== "WORKER";
   const { show: showLevels } = usePriceLevels();
   const { data: p, error, reload } = useApi<Detail>(`/products/${id}`);
   const [editing, setEditing] = useState(false);
@@ -74,21 +75,27 @@ export default function ProductPage() {
           )
         }
       />
-      <div className={`grid gap-4 sm:grid-cols-2 ${showLevels ? "xl:grid-cols-5" : "xl:grid-cols-4"}`}>
+      <div className={`grid gap-4 sm:grid-cols-2 ${showLevels ? "xl:grid-cols-5" : "xl:grid-cols-3"}`}>
         <Stat label="On hand" value={units(p.qtyOnHand)} tone={n(p.reorderPoint) > 0 && n(p.qtyOnHand) <= n(p.reorderPoint) ? "late" : "ink"} note={n(p.reorderPoint) ? `Reorder at ${qty(p.reorderPoint)}` : undefined} />
+        {showCost && (
+          <Stat
+            label="Our cost"
+            value={n(p.unitCost) > 0 ? money(p.unitCost) : "Not set"}
+            tone={n(p.unitCost) > 0 ? "ink" : "late"}
+            note={showLevels && n(p.listPrice) ? `List ${money(p.listPrice)} less ${n(p.supplierDiscountPct)}%` : undefined}
+          />
+        )}
         <Stat
-          label={showLevels ? `Selling price (${p.prices[p.prices.length - 1]?.tier ?? ""})` : "Selling price"}
-          value={n(p.prices[p.prices.length - 1]?.price) > 0 ? money(p.prices[p.prices.length - 1]?.price) : "Not set"}
-          tone={n(p.prices[p.prices.length - 1]?.price) > 0 ? "ink" : "late"}
-          note={p.sellPriceOverride && n(p.sellPriceOverride) > 0 ? `Fixed selling price: ${money(p.sellPriceOverride)}` : n(p.prices[p.prices.length - 1]?.price) > 0 ? "No fixed selling price — set by price level" : "Add a cost or a fixed selling price"}
+          label="Fixed selling price"
+          value={p.sellPriceOverride && n(p.sellPriceOverride) > 0 ? money(p.sellPriceOverride) : "None"}
+          note={p.sellPriceOverride && n(p.sellPriceOverride) > 0 ? "Used at every price level" : "Priced by level markup"}
         />
-        {showLevels ? (
+        {showLevels && (
           <>
-            <Stat label="Price in (standard cost)" value={money(p.unitCost)} note={n(p.listPrice) ? `List ${money(p.listPrice)} less ${n(p.supplierDiscountPct)}%` : undefined} />
             <Stat label="Weighted average cost" value={money(p.weightedAverageCost)} note="Of the units on hand" />
             <Stat label="Stock value" value={money(p.stockValue)} />
           </>
-        ) : null}
+        )}
       </div>
 
       <div className="mt-6 grid gap-6 xl:grid-cols-2">

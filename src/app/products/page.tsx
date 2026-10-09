@@ -16,7 +16,9 @@ import { DateInLabel } from "@/components/DateIn";
 import { AdjustStockDialog } from "@/components/AdjustStockDialog";
 
 export default function ProductsPage() {
-  const { settings, can } = useSession();
+  const { settings, can, user } = useSession();
+  // Our cost shows for everyone except the worker login
+  const showCost = user?.role !== "WORKER";
   const { show: showLevels } = usePriceLevels();
   const [q, setQ] = useState("");
   const [categoryId, setCategoryId] = useState("");
@@ -26,15 +28,14 @@ export default function ProductsPage() {
   const [dateMode, setDateMode] = useState<"" | "old" | "range">("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
-  const [tier, setTier] = useState("D");
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(50);
   const debounced = useDebounced(q);
-  const sort = useSort<"itemCode" | "name" | "qtyOnHand" | "unitCost" | "dateIn" | "supplier" | "price">("itemCode", "asc", [
+  const sort = useSort<"itemCode" | "name" | "qtyOnHand" | "unitCost" | "dateIn" | "supplier" | "fixedPrice">("itemCode", "asc", [
     "itemCode",
     "name",
     "supplier",
-    "price",
+    "fixedPrice",
     "unitCost",
   ]);
   // A new sort starts again from page 1
@@ -44,8 +45,6 @@ export default function ProductsPage() {
   if (categoryId) params.set("categoryId", categoryId);
   if (lowStock) params.set("lowStock", "true");
   if (inStock) params.set("inStock", "true");
-  // Price sorts by the price at the level being shown (or the store's top level when hidden)
-  if (sort.sort === "price") params.set("tier", showLevels ? tier : "D");
   if (dateMode === "old") params.set("dateIn", "old");
   if (dateMode === "range") {
     if (dateFrom) params.set("dateInFrom", dateFrom);
@@ -57,7 +56,6 @@ export default function ProductsPage() {
   const [adjusting, setAdjusting] = useState<Product | null>(null);
   const manager = can("MANAGER");
   const [importing, setImporting] = useState(false);
-  const markup = n(settings?.priceTiers.find((t) => t.code === tier)?.markupPct);
 
   return (
     <>
@@ -74,7 +72,7 @@ export default function ProductsPage() {
         }
       />
       <Panel padded={false}>
-        <div className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-[2fr_1fr_1fr_1fr_auto]">
+        <div className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-[2fr_1fr_1fr_auto]">
           <Field label="Search"><Input placeholder="Code, name or collection (e.g. W0930, Avalon)" value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} /></Field>
           <Field label="Category">
             <Select value={categoryId} onChange={(e) => { setCategoryId(e.target.value); setPage(1); }}>
@@ -82,11 +80,6 @@ export default function ProductsPage() {
               {settings?.categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </Select>
           </Field>
-          {showLevels ? <Field label="Show price at level">
-            <Select value={tier} onChange={(e) => setTier(e.target.value)}>
-              {settings?.priceTiers.map((t) => <option key={t.code} value={t.code}>{t.code} (+{n(t.markupPct)}%)</option>)}
-            </Select>
-          </Field> : <div />}
           <div>
             <Field label="Date in">
               <Select value={dateMode} onChange={(e) => { setDateMode(e.target.value as "" | "old" | "range"); setPage(1); }}>
@@ -121,9 +114,8 @@ export default function ProductsPage() {
                   <Th sortKey="name" sort={sort}>Item</Th>
                   <Th sortKey="supplier" sort={sort}>Supplier</Th>
                   {showLevels && <Th className="text-right">List</Th>}
-                  {showLevels && <Th sortKey="unitCost" sort={sort} className="text-right">Price in</Th>}
-                  <Th sortKey="price" sort={sort} className="text-right">{showLevels ? `Selling price (${tier})` : "Selling price"}</Th>
-                  <Th className="text-right">Fixed selling price</Th>
+                  {showCost && <Th sortKey="unitCost" sort={sort} className="text-right">Our cost</Th>}
+                  <Th sortKey="fixedPrice" sort={sort} className="text-right">Fixed selling price</Th>
                   <Th sortKey="qtyOnHand" sort={sort} className="text-right">On hand</Th>
                   <Th sortKey="dateIn" sort={sort}>Date in</Th>
                   {manager && <Th className="text-right">Change</Th>}
@@ -132,7 +124,6 @@ export default function ProductsPage() {
               <tbody>
                 {data.items.map((p) => {
                   const cost = n(p.unitCost);
-                  const price = p.sellPriceOverride ? n(p.sellPriceOverride) : cost * (1 + markup / 100);
                   const low = n(p.reorderPoint) > 0 && n(p.qtyOnHand) <= n(p.reorderPoint);
                   return (
                     <tr key={p.id}>
@@ -143,13 +134,13 @@ export default function ProductsPage() {
                       </Td>
                       <Td>{p.supplier?.name ?? "—"}</Td>
                       {showLevels && <Td className="num text-oak">{n(p.listPrice) ? money(p.listPrice) : "—"}</Td>}
-                      {showLevels && <Td className="num">{money(cost)}{n(p.supplierDiscountPct) > 0 && <div className="text-xs text-oak">{n(p.supplierDiscountPct)}% off list</div>}</Td>}
-                      <Td className="num font-medium">
-                        {price > 0 ? money(price) : manager ? (
-                          <button type="button" onClick={() => setEditing(p)} className="text-late underline-offset-2 hover:underline" title="No cost or fixed selling price on this item yet">Not set</button>
-                        ) : <span className="text-late">Not set</span>}
-                      </Td>
-                      <Td className="num">{p.sellPriceOverride && n(p.sellPriceOverride) > 0 ? <b className="text-walnut">{money(p.sellPriceOverride)}</b> : <span className="text-oak">—</span>}</Td>
+                      {showCost && (
+                        <Td className="num font-medium">
+                          {cost > 0 ? money(cost) : <span className="text-oak">—</span>}
+                          {showLevels && n(p.supplierDiscountPct) > 0 && <div className="text-xs font-normal text-oak">{n(p.supplierDiscountPct)}% off list</div>}
+                        </Td>
+                      )}
+                      <Td className="num font-medium">{p.sellPriceOverride && n(p.sellPriceOverride) > 0 ? <span className="text-walnut">{money(p.sellPriceOverride)}</span> : <span className="font-normal text-oak">—</span>}</Td>
                       <Td className={`num font-medium ${low ? "text-late" : ""}`}>{units(p.qtyOnHand)}</Td>
                       <Td className="whitespace-nowrap"><DateInLabel p={p} /></Td>
                       {manager && (
