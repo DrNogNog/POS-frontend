@@ -1,7 +1,7 @@
 "use client";
 // One supplier: contract, relationship stats, bills, orders and items.
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useState } from "react";
 import { useApi } from "@/lib/hooks";
 import { useSession } from "@/lib/session";
@@ -21,6 +21,7 @@ interface Detail extends Supplier {
 
 export default function SupplierPage() {
   const { id } = useParams<{ id: string }>();
+  const router = useRouter();
   const { can } = useSession();
   const { data: s, error, reload } = useApi<Detail>(`/suppliers/${id}`);
   const [editing, setEditing] = useState(false);
@@ -32,6 +33,7 @@ export default function SupplierPage() {
     <>
       <PageHeader
         title={s.name}
+        back={{ label: "Back to suppliers", onClick: () => (window.history.length > 1 ? router.back() : router.push("/suppliers")) }}
         subtitle={[s.contactName, s.phone, s.email].filter(Boolean).join(" · ")}
         actions={
           can("MANAGER", "ACCOUNTANT") && (
