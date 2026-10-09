@@ -52,15 +52,19 @@ export function useQueryParam(name: string): string {
   return value;
 }
 
-/** Column sorting state for tables. */
-export function useSort<K extends string>(initial: K, initialDir: "asc" | "desc" = "desc") {
+/**
+ * Column sorting state for tables. Clicking a new column sorts it newest /
+ * biggest first, except the columns in `ascFirst` (names, suppliers, prices),
+ * which start A→Z / lowest first. Clicking again flips it.
+ */
+export function useSort<K extends string>(initial: K, initialDir: "asc" | "desc" = "desc", ascFirst: readonly K[] = []) {
   const [sort, setSort] = useState<K>(initial);
   const [dir, setDir] = useState<"asc" | "desc">(initialDir);
   const toggle = (key: K) => {
     if (key === sort) setDir(dir === "asc" ? "desc" : "asc");
     else {
       setSort(key);
-      setDir("desc");
+      setDir(ascFirst.includes(key) ? "asc" : "desc");
     }
   };
   return { sort, dir, toggle, query: `sort=${sort}&dir=${dir}` };

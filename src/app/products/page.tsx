@@ -2,7 +2,7 @@
 // Items & stock: every product with price in, price out and quantity on hand.
 import Link from "next/link";
 import { PackagePlus, Pencil } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useApi, useDebounced, useSort } from "@/lib/hooks";
 import { useSession } from "@/lib/session";
 import { usePriceLevels } from "@/lib/privacy";
@@ -30,12 +30,22 @@ export default function ProductsPage() {
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(50);
   const debounced = useDebounced(q);
-  const sort = useSort<"itemCode" | "name" | "qtyOnHand" | "unitCost" | "dateIn">("itemCode", "asc");
+  const sort = useSort<"itemCode" | "name" | "qtyOnHand" | "unitCost" | "dateIn" | "supplier" | "price">("itemCode", "asc", [
+    "itemCode",
+    "name",
+    "supplier",
+    "price",
+    "unitCost",
+  ]);
+  // A new sort starts again from page 1
+  useEffect(() => setPage(1), [sort.sort, sort.dir]);
   const params = new URLSearchParams({ page: String(page), limit: String(limit), sort: sort.sort, dir: sort.dir });
   if (debounced) params.set("q", debounced);
   if (categoryId) params.set("categoryId", categoryId);
   if (lowStock) params.set("lowStock", "true");
   if (inStock) params.set("inStock", "true");
+  // Price sorts by the price at the level being shown (or the store's top level when hidden)
+  if (sort.sort === "price") params.set("tier", showLevels ? tier : "D");
   if (dateMode === "old") params.set("dateIn", "old");
   if (dateMode === "range") {
     if (dateFrom) params.set("dateInFrom", dateFrom);
@@ -109,10 +119,10 @@ export default function ProductsPage() {
                 <tr>
                   <Th sortKey="itemCode" sort={sort}>Code</Th>
                   <Th sortKey="name" sort={sort}>Item</Th>
-                  <Th>Supplier</Th>
+                  <Th sortKey="supplier" sort={sort}>Supplier</Th>
                   {showLevels && <Th className="text-right">List</Th>}
                   {showLevels && <Th sortKey="unitCost" sort={sort} className="text-right">Price in</Th>}
-                  <Th className="text-right">{showLevels ? `Price out (${tier})` : "Price"}</Th>
+                  <Th sortKey="price" sort={sort} className="text-right">{showLevels ? `Price out (${tier})` : "Price"}</Th>
                   <Th sortKey="qtyOnHand" sort={sort} className="text-right">On hand</Th>
                   <Th sortKey="dateIn" sort={sort}>Date in</Th>
                   {manager && <Th className="text-right">Change</Th>}
