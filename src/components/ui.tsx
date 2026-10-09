@@ -4,7 +4,10 @@
 // and behaves the same: buttons, inputs, panels, tables, badges, dialogs.
 // -----------------------------------------------------------------------------
 import {
+  Children,
+  Fragment,
   createContext,
+  isValidElement,
   forwardRef,
   useCallback,
   useContext,
@@ -12,12 +15,15 @@ import {
   useRef,
   useState,
   type ButtonHTMLAttributes,
+  type ChangeEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
   type InputHTMLAttributes,
   type ReactNode,
   type SelectHTMLAttributes,
   type TextareaHTMLAttributes,
 } from "react";
-import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, X } from "lucide-react";
+import { Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, X } from "lucide-react";
+import { createPortal } from "react-dom";
 import { cn } from "@/lib/utils";
 
 // ---- Buttons ------------------------------------------------------------------
@@ -62,11 +68,221 @@ export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputE
   return <input ref={ref} className={cn(fieldBase, "h-11", className)} {...rest} />;
 });
 
-export function Select({ className, children, ...rest }: SelectHTMLAttributes<HTMLSelectElement>) {
+// ---- Select ---------------------------------------------------------------------
+// Looks and is used like a normal <select> with <option>s, but opens a list
+// that scrolls (about 8 rows tall) and, when there are many choices, has a
+// search box at the top — so long lists like suppliers stay easy to use.
+type Choice = { value: string; label: string; disabled?: boolean };
+
+function textOf(node: ReactNode): string {
+  if (node === null || node === undefined || typeof node === "boolean") return "";
+  if (typeof node === "string" || typeof node === "number") return String(node);
+  if (Array.isArray(node)) return node.map(textOf).join("");
+  if (isValidElement<{ children?: ReactNode }>(node)) return textOf(node.props.children);
+  return "";
+}
+
+function choicesOf(children: ReactNode): Choice[] {
+  const out: Choice[] = [];
+  Children.toArray(children).forEach((child) => {
+    if (!isValidElement<{ value?: string | number; children?: ReactNode; disabled?: boolean }>(child)) return;
+    if (child.type === Fragment) return void out.push(...choicesOf(child.props.children));
+    const label = textOf(child.props.children);
+    out.push({ value: child.props.value === undefined ? label : String(child.props.value), label, disabled: child.props.disabled });
+  });
+  return out;
+}
+
+const SEARCH_FROM = 8; // show a search box when there are more choices than this
+
+export function Select({
+  className,
+  children,
+  value,
+  onChange,
+  id,
+  disabled,
+  "aria-label": ariaLabel,
+}: SelectHTMLAttributes<HTMLSelectElement>) {
+  const choices = choicesOf(children);
+  const current = value === undefined || value === null ? "" : String(value);
+  const selected = choices.find((c) => c.value === current) ?? choices[0];
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState("");
+  const [active, setActive] = useState(0);
+  const [pos, setPos] = useState<{ left: number; width: number; top?: number; bottom?: number; maxHeight: number } | null>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
+  const searchable = choices.length > SEARCH_FROM;
+  const term = q.trim().toLowerCase();
+  const shown = term ? choices.filter((c) => c.label.toLowerCase().includes(term)) : choices;
+
+  const place = useCallback(() => {
+    const r = buttonRef.current?.getBoundingClientRect();
+    if (!r) return;
+    const below = window.innerHeight - r.bottom - 8;
+    const above = r.top - 8;
+    const want = 320;
+    const width = Math.max(r.width, 220);
+    const left = Math.min(r.left, window.innerWidth - width - 8);
+    if (below >= Math.min(want, 200) || below >= above) setPos({ left, width, top: r.bottom + 4, maxHeight: Math.min(want, below) });
+    else setPos({ left, width, bottom: window.innerHeight - r.top + 4, maxHeight: Math.min(want, above) });
+  }, []);
+
+  const close = useCallback((focusButton = true) => {
+    setOpen(false);
+    setQ("");
+    if (focusButton) buttonRef.current?.focus();
+  }, []);
+
+  const openList = (startTyping = "") => {
+    if (disabled) return;
+    place();
+    setQ(startTyping);
+    const i = choices.findIndex((c) => c.value === current);
+    setActive(startTyping ? 0 : Math.max(0, i));
+    setOpen(true);
+  };
+
+  const pick = (c: Choice) => {
+    if (c.disabled) return;
+    close();
+    if (c.value !== current) onChange?.({ target: { value: c.value }, currentTarget: { value: c.value } } as unknown as ChangeEvent<HTMLSelectElement>);
+  };
+
+  // Close on a click elsewhere; keep the list attached while the page scrolls or resizes
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      const t = e.target as Node;
+      if (!buttonRef.current?.contains(t) && !listRef.current?.contains(t)) close(false);
+    };
+    const onMove = (e: Event) => {
+      if (listRef.current?.contains(e.target as Node)) return;
+      place();
+    };
+    document.addEventListener("mousedown", onDown);
+    window.addEventListener("scroll", onMove, true);
+    window.addEventListener("resize", place);
+    if (searchable) searchRef.current?.focus();
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      window.removeEventListener("scroll", onMove, true);
+      window.removeEventListener("resize", place);
+    };
+  }, [open, close, place, searchable]);
+
+  // Keep the highlighted row in view
+  useEffect(() => {
+    if (!open) return;
+    listRef.current?.querySelector<HTMLElement>(`[data-index="${active}"]`)?.scrollIntoView({ block: "nearest" });
+  }, [active, open]);
+
+  const onKeys = (e: ReactKeyboardEvent<HTMLElement>) => {
+    if (!open) {
+      if (["ArrowDown", "ArrowUp", "Enter", " "].includes(e.key)) {
+        e.preventDefault();
+        openList();
+      } else if (searchable && e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault();
+        openList(e.key);
+      }
+      return;
+    }
+    if (e.key === "Escape") {
+      e.preventDefault();
+      e.stopPropagation(); // don't also close a dialog the list is in
+      close();
+    } else if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setActive((a) => Math.min(a + 1, shown.length - 1));
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setActive((a) => Math.max(a - 1, 0));
+    } else if (e.key === "Home" || e.key === "PageUp") {
+      e.preventDefault();
+      setActive(0);
+    } else if (e.key === "End" || e.key === "PageDown") {
+      e.preventDefault();
+      setActive(shown.length - 1);
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      if (shown[active]) pick(shown[active]);
+    } else if (e.key === "Tab") {
+      close(false);
+    }
+  };
+
   return (
-    <select className={cn(fieldBase, "h-11 pr-10", className)} {...rest}>
-      {children}
-    </select>
+    <>
+      <button
+        ref={buttonRef}
+        type="button"
+        id={id}
+        disabled={disabled}
+        aria-label={ariaLabel}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        onClick={() => (open ? close() : openList())}
+        onKeyDown={onKeys}
+        className={cn(fieldBase, "relative flex h-11 items-center pr-10 text-left", className)}
+      >
+        <span className={cn("block truncate", !selected?.value && "text-oak")}>{selected?.label ?? ""}</span>
+        <ChevronDown size={16} className={cn("pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-oak transition-transform", open && "rotate-180")} />
+      </button>
+      {open && pos &&
+        createPortal(
+          <div
+            ref={listRef}
+            className="fixed z-[65] flex flex-col overflow-hidden rounded-lux border border-hairline bg-white shadow-xl"
+            style={{ left: pos.left, width: pos.width, top: pos.top, bottom: pos.bottom, maxHeight: pos.maxHeight }}
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            {searchable && (
+              <div className="border-b border-hairline p-2">
+                <input
+                  ref={searchRef}
+                  value={q}
+                  onChange={(e) => { setQ(e.target.value); setActive(0); }}
+                  onKeyDown={onKeys}
+                  placeholder={`Search ${choices.length} choices…`}
+                  aria-label="Search the list"
+                  className={cn(fieldBase, "h-9 text-sm")}
+                />
+              </div>
+            )}
+            <div role="listbox" className="min-h-0 flex-1 overflow-y-auto overscroll-contain py-1">
+              {shown.length === 0 ? (
+                <p className="px-3.5 py-2 text-sm text-oak">Nothing matches &ldquo;{q.trim()}&rdquo;.</p>
+              ) : (
+                shown.map((c, i) => (
+                  <button
+                    key={`${c.value}-${i}`}
+                    type="button"
+                    role="option"
+                    aria-selected={c.value === current}
+                    data-index={i}
+                    disabled={c.disabled}
+                    onMouseEnter={() => setActive(i)}
+                    onClick={() => pick(c)}
+                    className={cn(
+                      "flex w-full items-center justify-between gap-3 px-3.5 py-2 text-left text-sm",
+                      i === active ? "bg-linen" : "",
+                      c.value === current ? "font-semibold text-walnut" : "text-ink",
+                      c.disabled && "opacity-50"
+                    )}
+                  >
+                    <span className="truncate">{c.label}</span>
+                    {c.value === current && <Check size={15} className="shrink-0 text-brass" />}
+                  </button>
+                ))
+              )}
+            </div>
+          </div>,
+          document.body
+        )}
+    </>
   );
 }
 
