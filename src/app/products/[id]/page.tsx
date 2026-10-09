@@ -14,6 +14,7 @@ import type { Product, Supplier } from "@/lib/types";
 import { Button, ErrorNote, Field, Input, Loading, Modal, PageHeader, Panel, Stat, Table, Td, Th, useAction } from "@/components/ui";
 import { CodeExplanation } from "@/components/ItemCode";
 import { ProductForm } from "@/components/forms";
+import { DateInLabel, DateInPicker, todayDateIn, type DateInValue } from "@/components/DateIn";
 
 interface Detail extends Product {
   supplier: Supplier | null;
@@ -41,6 +42,7 @@ export default function ProductPage() {
   const [editing, setEditing] = useState(false);
   const [adjusting, setAdjusting] = useState(false);
   const [adj, setAdj] = useState({ qtyChange: "", unitCost: "", reason: "", costUpdate: "average" as "average" | "replace" | "keep" });
+  const [adjDateIn, setAdjDateIn] = useState<DateInValue>(todayDateIn());
   const { busy, run } = useAction();
   // Opened from the list with ?adjust=1 or ?edit=1
   const adjustParam = useQueryParam("adjust");
@@ -62,6 +64,14 @@ export default function ProductPage() {
             unitCost: adj.unitCost ? Number(adj.unitCost) : undefined,
             reason: adj.reason,
             costUpdate: adj.costUpdate,
+            // When the added units came in
+            ...(Number(adj.qtyChange) > 0
+              ? adjDateIn.old
+                ? { oldInventory: true }
+                : adjDateIn.day
+                  ? { dateIn: adjDateIn.day }
+                  : {}
+              : {}),
           },
         }),
       "Stock updated"
@@ -69,6 +79,7 @@ export default function ProductPage() {
     if (ok) {
       setAdjusting(false);
       setAdj({ qtyChange: "", unitCost: "", reason: "", costUpdate: "average" });
+      setAdjDateIn(todayDateIn());
       await reload();
     }
   }
@@ -78,7 +89,13 @@ export default function ProductPage() {
       <PageHeader
         title={`${p.itemCode} — ${p.name}`}
         back={{ label: "Back", onClick: () => (window.history.length > 1 ? router.back() : router.push("/products")) }}
-        subtitle={[p.category?.name, p.collection, p.supplier && `from ${p.supplier.name}`].filter(Boolean).join(" · ")}
+        subtitle={
+          <>
+            {[p.category?.name, p.collection, p.supplier && `from ${p.supplier.name}`].filter(Boolean).join(" · ")}
+            {(p.category || p.collection || p.supplier) && " · "}
+            <span className="inline-flex items-center gap-1.5">Date in: <DateInLabel p={p} /></span>
+          </>
+        }
         actions={
           can("MANAGER") && (
             <>
@@ -151,8 +168,8 @@ export default function ProductPage() {
               <tbody>
                 {p.lots.map((l) => (
                   <tr key={l.id}>
-                    <Td>{date(l.receivedAt)}</Td>
-                    <Td>{l.sourceRef || l.source.toLowerCase()}</Td>
+                    <Td>{l.sourceRef === "OLD INVENTORY" ? <span className="text-oak">Before POS</span> : date(l.receivedAt)}</Td>
+                    <Td>{l.sourceRef === "OLD INVENTORY" ? "Old inventory" : l.sourceRef || l.source.toLowerCase()}</Td>
                     <Td className="num">{qty(l.qtyRemaining)} / {qty(l.qtyReceived)}</Td>
                     <Td className="num">{money(l.unitCost)}</Td>
                     <Td className="num">{money(n(l.qtyRemaining) * n(l.unitCost))}</Td>
@@ -201,6 +218,11 @@ export default function ProductPage() {
           <Field label="Unit cost (when adding)" hint={`Default ${money(p.unitCost)}`}><Input type="number" step="0.01" min={0} value={adj.unitCost} onChange={(e) => setAdj({ ...adj, unitCost: e.target.value })} /></Field>
           <Field label="Reason" className="sm:col-span-2"><Input value={adj.reason} onChange={(e) => setAdj({ ...adj, reason: e.target.value })} placeholder="Opening count, damaged in delivery…" /></Field>
         </div>
+        {Number(adj.qtyChange) > 0 && (
+          <div className="mt-4 sm:w-1/2">
+            <DateInPicker value={adjDateIn} onChange={setAdjDateIn} id="adjust-date-in" />
+          </div>
+        )}
         {Number(adj.qtyChange) > 0 && (
           <fieldset className="mt-4">
             <legend className="mb-2 text-sm font-semibold text-walnut">What happens to the item&apos;s cost ({money(p.unitCost)})?</legend>

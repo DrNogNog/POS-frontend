@@ -122,6 +122,10 @@ export interface Product {
   reorderPoint: Money;
   reorderQty: Money;
   images: string[];
+  /** When the stock came in (latest arrival); null when unknown */
+  dateIn: string | null;
+  /** Stock from before the POS system */
+  oldInventory: boolean;
 }
 
 export interface Customer {

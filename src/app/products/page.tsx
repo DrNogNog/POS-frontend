@@ -12,6 +12,7 @@ import { Button, Checkbox, Empty, ErrorNote, Field, Input, Loading, PageHeader, 
 import { ItemCode } from "@/components/ItemCode";
 import { ProductForm } from "@/components/forms";
 import { ImportDialog } from "@/components/ImportDialog";
+import { DateInLabel } from "@/components/DateIn";
 
 export default function ProductsPage() {
   const { settings, can } = useSession();
@@ -20,15 +21,24 @@ export default function ProductsPage() {
   const [categoryId, setCategoryId] = useState("");
   const [lowStock, setLowStock] = useState(false);
   const [inStock, setInStock] = useState(false);
+  // Date in filter: "" all | "old" old inventory | "range" came in between two days
+  const [dateMode, setDateMode] = useState<"" | "old" | "range">("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
   const [tier, setTier] = useState("D");
   const [page, setPage] = useState(1);
   const debounced = useDebounced(q);
-  const sort = useSort<"itemCode" | "name" | "qtyOnHand" | "unitCost">("itemCode", "asc");
+  const sort = useSort<"itemCode" | "name" | "qtyOnHand" | "unitCost" | "dateIn">("itemCode", "asc");
   const params = new URLSearchParams({ page: String(page), limit: "50", sort: sort.sort, dir: sort.dir });
   if (debounced) params.set("q", debounced);
   if (categoryId) params.set("categoryId", categoryId);
   if (lowStock) params.set("lowStock", "true");
   if (inStock) params.set("inStock", "true");
+  if (dateMode === "old") params.set("dateIn", "old");
+  if (dateMode === "range") {
+    if (dateFrom) params.set("dateInFrom", dateFrom);
+    if (dateTo) params.set("dateInTo", dateTo);
+  }
   const { data, error, loading, reload } = useApi<{ items: Product[]; total: number }>(`/products?${params}`);
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<Product | null>(null);
@@ -51,7 +61,7 @@ export default function ProductsPage() {
         }
       />
       <Panel padded={false}>
-        <div className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-[2fr_1fr_1fr_auto]">
+        <div className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-[2fr_1fr_1fr_1fr_auto]">
           <Field label="Search"><Input placeholder="Code, name or collection (e.g. W0930, Avalon)" value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} /></Field>
           <Field label="Category">
             <Select value={categoryId} onChange={(e) => { setCategoryId(e.target.value); setPage(1); }}>
@@ -64,6 +74,21 @@ export default function ProductsPage() {
               {settings?.priceTiers.map((t) => <option key={t.code} value={t.code}>{t.code} (+{n(t.markupPct)}%)</option>)}
             </Select>
           </Field> : <div />}
+          <div>
+            <Field label="Date in">
+              <Select value={dateMode} onChange={(e) => { setDateMode(e.target.value as "" | "old" | "range"); setPage(1); }}>
+                <option value="">Any date</option>
+                <option value="old">Old inventory (before POS system)</option>
+                <option value="range">Came in between…</option>
+              </Select>
+            </Field>
+            {dateMode === "range" && (
+              <div className="mt-2 grid grid-cols-2 gap-2">
+                <Input type="date" aria-label="Came in from" value={dateFrom} onChange={(e) => { setDateFrom(e.target.value); setPage(1); }} />
+                <Input type="date" aria-label="Came in to" value={dateTo} onChange={(e) => { setDateTo(e.target.value); setPage(1); }} />
+              </div>
+            )}
+          </div>
           <div className="flex flex-col justify-end gap-1 pb-1">
             <Checkbox label="Running low" checked={lowStock} onChange={(v) => { setLowStock(v); setPage(1); }} />
             <Checkbox label="In stock only" checked={inStock} onChange={(v) => { setInStock(v); setPage(1); }} />
@@ -86,6 +111,7 @@ export default function ProductsPage() {
                   {showLevels && <Th sortKey="unitCost" sort={sort} className="text-right">Price in</Th>}
                   <Th className="text-right">{showLevels ? `Price out (${tier})` : "Price"}</Th>
                   <Th sortKey="qtyOnHand" sort={sort} className="text-right">On hand</Th>
+                  <Th sortKey="dateIn" sort={sort}>Date in</Th>
                   {manager && <Th className="text-right">Change</Th>}
                 </tr>
               </thead>
@@ -106,6 +132,7 @@ export default function ProductsPage() {
                       {showLevels && <Td className="num">{money(cost)}{n(p.supplierDiscountPct) > 0 && <div className="text-xs text-oak">{n(p.supplierDiscountPct)}% off list</div>}</Td>}
                       <Td className="num font-medium">{money(price)}</Td>
                       <Td className={`num font-medium ${low ? "text-late" : ""}`}>{qty(p.qtyOnHand)} <span className="text-xs text-oak">{p.unit}</span></Td>
+                      <Td className="whitespace-nowrap"><DateInLabel p={p} /></Td>
                       {manager && (
                         <Td className="whitespace-nowrap text-right">
                           <Button size="sm" variant="ghost" onClick={() => setEditing(p)} aria-label={`Edit ${p.itemCode}`}>

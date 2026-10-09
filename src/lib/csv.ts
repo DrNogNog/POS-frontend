@@ -46,13 +46,14 @@ export const PRICE_LIST_COLUMNS = [
   { key: "unitCost", label: "Unit cost", required: false, example: "", note: "Leave empty to work it out from list price and discount." },
   { key: "unit", label: "Unit", required: false, example: "each", note: "each, box, sq ft, linear ft…" },
   { key: "qtyOnHand", label: "Qty on hand", required: false, example: "4", note: "Opening stock, only for new items." },
+  { key: "dateIn", label: "Date in", required: false, example: "old", note: "\"old\" (or empty) = old inventory from before the POS; or the date it came in, e.g. 2026-10-09." },
 ] as const;
 
 const squash = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
 const HEADER_ALIASES: Record<string, string> = {
   code: "itemCode", sku: "itemCode", item: "itemCode", itemno: "itemCode",
   discount: "supplierDiscountPct", discountpct: "supplierDiscountPct", supplierdiscount: "supplierDiscountPct",
-  list: "listPrice", msrp: "listPrice", cost: "unitCost", qty: "qtyOnHand", quantity: "qtyOnHand", onhand: "qtyOnHand", stock: "qtyOnHand",
+  list: "listPrice", msrp: "listPrice", cost: "unitCost", received: "dateIn", datereceived: "dateIn", qty: "qtyOnHand", quantity: "qtyOnHand", onhand: "qtyOnHand", stock: "qtyOnHand",
 };
 for (const c of PRICE_LIST_COLUMNS) {
   HEADER_ALIASES[squash(c.key)] = c.key;

@@ -9,6 +9,7 @@ import { usePriceLevels } from "@/lib/privacy";
 import { isoDay, money, n } from "@/lib/format";
 import type { Customer, Product, Supplier } from "@/lib/types";
 import { Button, Checkbox, Field, Input, Modal, Select, Textarea, useAction } from "./ui";
+import { DateInPicker, dateInOf, type DateInValue } from "./DateIn";
 
 // ---- Customer ------------------------------------------------------------------------
 const emptyCustomer = {
@@ -317,6 +318,7 @@ export function ProductForm({
   const [photoNote, setPhotoNote] = useState("");
   // "Average in" helper for the cost
   const [avg, setAvg] = useState({ qty: "", cost: "" });
+  const [dateIn, setDateIn] = useState<DateInValue>(dateInOf(null));
   const { busy, run } = useAction();
 
   useEffect(() => {
@@ -326,6 +328,7 @@ export function ProductForm({
     setRemoved([]);
     setPhotoNote("");
     setAvg({ qty: "", cost: "" });
+    setDateIn(dateInOf(product));
     setF({
       itemCode: product?.itemCode ?? "",
       name: product?.name ?? "",
@@ -383,6 +386,9 @@ export function ProductForm({
     }
     // Empty optional fields are sent as "null" so they can be cleared
     for (const k of ["sellPriceOverride", "categoryId", "supplierId"] as const) if (f[k] === "") form.set(k, "null");
+    // Date in: old inventory, or the day it came in
+    form.set("oldInventory", dateIn.old ? "true" : "false");
+    form.set("dateIn", dateIn.old || !dateIn.day ? "null" : dateIn.day);
     newPhotos.forEach((file) => form.append("images", file));
     if (removed.length) form.append("removeImages", removed.join(","));
     const saved = await run(
@@ -493,6 +499,7 @@ export function ProductForm({
         {!product && (
           <Field label="Opening stock" hint="Counted on hand now"><Input type="number" min={0} value={f.openingQty} onChange={(e) => set("openingQty", e.target.value)} /></Field>
         )}
+        <DateInPicker value={dateIn} onChange={setDateIn} id="product-date-in" />
       </div>
       <div className="mt-4"><Checkbox label="Charge sales tax" checked={f.taxable} onChange={(v) => set("taxable", v)} /></div>
 
