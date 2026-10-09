@@ -16,6 +16,12 @@ export function qty(value: unknown): string {
   return Number.isInteger(x) ? String(x) : x.toFixed(3).replace(/0+$/, "");
 }
 
+/** Stock counts read as units: "1 unit", "3 units". */
+export function units(value: unknown): string {
+  const x = n(value);
+  return `${qty(x)} ${Math.abs(x) === 1 ? "unit" : "units"}`;
+}
+
 export function pct(value: unknown, digits = 1): string {
   return `${n(value).toFixed(digits)}%`;
 }

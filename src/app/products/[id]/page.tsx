@@ -5,16 +5,17 @@ import Link from "next/link";
 import Image from "next/image";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { api, imageUrl } from "@/lib/api";
+import { imageUrl } from "@/lib/api";
 import { useApi, useQueryParam } from "@/lib/hooks";
 import { useSession } from "@/lib/session";
 import { Private, usePriceLevels } from "@/lib/privacy";
-import { date, dateTime, money, n, pct, qty } from "@/lib/format";
+import { date, dateTime, money, n, pct, qty, units } from "@/lib/format";
 import type { Product, Supplier } from "@/lib/types";
-import { Button, ErrorNote, Field, Input, Loading, Modal, PageHeader, Panel, Stat, Table, Td, Th, useAction } from "@/components/ui";
+import { Button, ErrorNote, Loading, PageHeader, Panel, Stat, Table, Td, Th } from "@/components/ui";
 import { CodeExplanation } from "@/components/ItemCode";
 import { ProductForm } from "@/components/forms";
-import { DateInLabel, DateInPicker, todayDateIn, type DateInValue } from "@/components/DateIn";
+import { DateInLabel } from "@/components/DateIn";
+import { AdjustStockDialog } from "@/components/AdjustStockDialog";
 
 interface Detail extends Product {
   supplier: Supplier | null;
@@ -41,9 +42,6 @@ export default function ProductPage() {
   const { data: p, error, reload } = useApi<Detail>(`/products/${id}`);
   const [editing, setEditing] = useState(false);
   const [adjusting, setAdjusting] = useState(false);
-  const [adj, setAdj] = useState({ qtyChange: "", unitCost: "", reason: "", costUpdate: "average" as "average" | "replace" | "keep" });
-  const [adjDateIn, setAdjDateIn] = useState<DateInValue>(todayDateIn());
-  const { busy, run } = useAction();
   // Opened from the list with ?adjust=1 or ?edit=1
   const adjustParam = useQueryParam("adjust");
   const editParam = useQueryParam("edit");
@@ -54,35 +52,6 @@ export default function ProductPage() {
 
   if (error) return <ErrorNote>{error}</ErrorNote>;
   if (!p) return <Loading />;
-
-  async function adjust() {
-    const ok = await run(
-      () =>
-        api(`/products/${id}/adjust`, {
-          body: {
-            qtyChange: Number(adj.qtyChange),
-            unitCost: adj.unitCost ? Number(adj.unitCost) : undefined,
-            reason: adj.reason,
-            costUpdate: adj.costUpdate,
-            // When the added units came in
-            ...(Number(adj.qtyChange) > 0
-              ? adjDateIn.old
-                ? { oldInventory: true }
-                : adjDateIn.day
-                  ? { dateIn: adjDateIn.day }
-                  : {}
-              : {}),
-          },
-        }),
-      "Stock updated"
-    );
-    if (ok) {
-      setAdjusting(false);
-      setAdj({ qtyChange: "", unitCost: "", reason: "", costUpdate: "average" });
-      setAdjDateIn(todayDateIn());
-      await reload();
-    }
-  }
 
   return (
     <>
@@ -106,7 +75,7 @@ export default function ProductPage() {
         }
       />
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <Stat label="On hand" value={`${qty(p.qtyOnHand)} ${p.unit}`} tone={n(p.reorderPoint) > 0 && n(p.qtyOnHand) <= n(p.reorderPoint) ? "late" : "ink"} note={n(p.reorderPoint) ? `Reorder at ${qty(p.reorderPoint)}` : undefined} />
+        <Stat label="On hand" value={units(p.qtyOnHand)} tone={n(p.reorderPoint) > 0 && n(p.qtyOnHand) <= n(p.reorderPoint) ? "late" : "ink"} note={n(p.reorderPoint) ? `Reorder at ${qty(p.reorderPoint)}` : undefined} />
         {showLevels ? (
           <>
             <Stat label="Price in (standard cost)" value={money(p.unitCost)} note={n(p.listPrice) ? `List ${money(p.listPrice)} less ${n(p.supplierDiscountPct)}%` : undefined} />
@@ -204,51 +173,7 @@ export default function ProductPage() {
       </Private>
 
       <ProductForm open={editing} onClose={() => setEditing(false)} product={p} onSaved={() => reload()} />
-      <Modal
-        open={adjusting}
-        onClose={() => setAdjusting(false)}
-        title={`Adjust stock — ${p.itemCode}`}
-        footer={<><Button variant="secondary" onClick={() => setAdjusting(false)}>Cancel</Button><Button onClick={adjust} busy={busy} disabled={!Number(adj.qtyChange) || !adj.reason.trim()}>Save adjustment</Button></>}
-      >
-        <p className="mb-4 text-sm text-oak">
-          Use this for counts, opening stock, or damaged goods. New stock bought from a supplier should come in through a purchase order.
-        </p>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Change in quantity" hint="Positive adds, negative removes (e.g. -2)"><Input type="number" step="any" value={adj.qtyChange} onChange={(e) => setAdj({ ...adj, qtyChange: e.target.value })} /></Field>
-          <Field label="Unit cost (when adding)" hint={`Default ${money(p.unitCost)}`}><Input type="number" step="0.01" min={0} value={adj.unitCost} onChange={(e) => setAdj({ ...adj, unitCost: e.target.value })} /></Field>
-          <Field label="Reason" className="sm:col-span-2"><Input value={adj.reason} onChange={(e) => setAdj({ ...adj, reason: e.target.value })} placeholder="Opening count, damaged in delivery…" /></Field>
-        </div>
-        {Number(adj.qtyChange) > 0 && (
-          <div className="mt-4 sm:w-1/2">
-            <DateInPicker value={adjDateIn} onChange={setAdjDateIn} id="adjust-date-in" />
-          </div>
-        )}
-        {Number(adj.qtyChange) > 0 && (
-          <fieldset className="mt-4">
-            <legend className="mb-2 text-sm font-semibold text-walnut">What happens to the item&apos;s cost ({money(p.unitCost)})?</legend>
-            <div className="space-y-2 text-sm">
-              {(
-                [
-                  ["average", "Average it in", (() => {
-                    const have = Math.max(0, n(p.qtyOnHand));
-                    const add = Number(adj.qtyChange);
-                    const c = adj.unitCost ? Number(adj.unitCost) : n(p.unitCost);
-                    const avg = have + add > 0 && n(p.unitCost) > 0 && have > 0 ? (have * n(p.unitCost) + add * c) / (have + add) : c;
-                    return `New cost ${money(avg)} — the weighted average of ${qty(have)} on hand and ${add} added`;
-                  })()],
-                  ["replace", "Use the new unit cost", `New cost ${money(adj.unitCost || p.unitCost)}`],
-                  ["keep", "Keep the cost as it is", `Stays ${money(p.unitCost)}`],
-                ] as const
-              ).map(([value, label, note]) => (
-                <label key={value} className="flex cursor-pointer items-start gap-2">
-                  <input type="radio" name="costUpdate" className="mt-1 accent-walnut" checked={adj.costUpdate === value} onChange={() => setAdj({ ...adj, costUpdate: value })} />
-                  <span><b className="text-walnut">{label}</b> <span className="text-oak">· {note}</span></span>
-                </label>
-              ))}
-            </div>
-          </fieldset>
-        )}
-      </Modal>
+      <AdjustStockDialog item={adjusting ? p : null} onClose={() => setAdjusting(false)} onDone={() => reload()} />
     </>
   );
 }

@@ -6,13 +6,14 @@ import { useState } from "react";
 import { useApi, useDebounced, useSort } from "@/lib/hooks";
 import { useSession } from "@/lib/session";
 import { usePriceLevels } from "@/lib/privacy";
-import { money, n, qty } from "@/lib/format";
+import { money, n, units } from "@/lib/format";
 import type { Product } from "@/lib/types";
 import { Button, Checkbox, Empty, ErrorNote, Field, Input, Loading, PageHeader, Panel, Select, Table, Td, Th } from "@/components/ui";
 import { ItemCode } from "@/components/ItemCode";
 import { ProductForm } from "@/components/forms";
 import { ImportDialog } from "@/components/ImportDialog";
 import { DateInLabel } from "@/components/DateIn";
+import { AdjustStockDialog } from "@/components/AdjustStockDialog";
 
 export default function ProductsPage() {
   const { settings, can } = useSession();
@@ -42,6 +43,7 @@ export default function ProductsPage() {
   const { data, error, loading, reload } = useApi<{ items: Product[]; total: number }>(`/products?${params}`);
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<Product | null>(null);
+  const [adjusting, setAdjusting] = useState<Product | null>(null);
   const manager = can("MANAGER");
   const [importing, setImporting] = useState(false);
   const markup = n(settings?.priceTiers.find((t) => t.code === tier)?.markupPct);
@@ -131,16 +133,16 @@ export default function ProductsPage() {
                       {showLevels && <Td className="num text-oak">{n(p.listPrice) ? money(p.listPrice) : "—"}</Td>}
                       {showLevels && <Td className="num">{money(cost)}{n(p.supplierDiscountPct) > 0 && <div className="text-xs text-oak">{n(p.supplierDiscountPct)}% off list</div>}</Td>}
                       <Td className="num font-medium">{money(price)}</Td>
-                      <Td className={`num font-medium ${low ? "text-late" : ""}`}>{qty(p.qtyOnHand)} <span className="text-xs text-oak">{p.unit}</span></Td>
+                      <Td className={`num font-medium ${low ? "text-late" : ""}`}>{units(p.qtyOnHand)}</Td>
                       <Td className="whitespace-nowrap"><DateInLabel p={p} /></Td>
                       {manager && (
                         <Td className="whitespace-nowrap text-right">
                           <Button size="sm" variant="ghost" onClick={() => setEditing(p)} aria-label={`Edit ${p.itemCode}`}>
                             <Pencil size={15} /> Edit
                           </Button>
-                          <Link href={`/products/${p.id}?adjust=1`} aria-label={`Adjust stock of ${p.itemCode}`}>
-                            <Button size="sm" variant="ghost"><PackagePlus size={15} /> Stock</Button>
-                          </Link>
+                          <Button size="sm" variant="ghost" onClick={() => setAdjusting(p)} aria-label={`Adjust stock of ${p.itemCode}`}>
+                            <PackagePlus size={15} /> Adjust stock
+                          </Button>
                         </Td>
                       )}
                     </tr>
@@ -160,6 +162,7 @@ export default function ProductsPage() {
       </Panel>
       <ProductForm open={adding} onClose={() => setAdding(false)} onSaved={() => reload()} />
       <ProductForm open={!!editing} product={editing} onClose={() => setEditing(null)} onSaved={() => reload()} />
+      <AdjustStockDialog item={adjusting} onClose={() => setAdjusting(null)} onDone={() => reload()} />
       <ImportDialog open={importing} onClose={() => setImporting(false)} onDone={() => reload()} />
     </>
   );

@@ -44,7 +44,7 @@ export const PRICE_LIST_COLUMNS = [
   { key: "listPrice", label: "List price", required: false, example: "245.00", note: "The supplier's price before our discount." },
   { key: "supplierDiscountPct", label: "Supplier discount %", required: false, example: "40", note: "Price in = list price less this %." },
   { key: "unitCost", label: "Unit cost", required: false, example: "", note: "Leave empty to work it out from list price and discount." },
-  { key: "unit", label: "Unit", required: false, example: "each", note: "each, box, sq ft, linear ft…" },
+  { key: "unit", label: "Unit", required: false, example: "unit", note: "Leave empty for unit." },
   { key: "qtyOnHand", label: "Qty on hand", required: false, example: "4", note: "Opening stock, only for new items." },
   { key: "dateIn", label: "Date in", required: false, example: "old", note: "\"old\" (or empty) = old inventory from before the POS; or the date it came in, e.g. 2026-10-09." },
 ] as const;
