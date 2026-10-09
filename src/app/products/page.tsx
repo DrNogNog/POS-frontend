@@ -7,7 +7,7 @@ import { useApi, useDebounced, useSort } from "@/lib/hooks";
 import { useSession } from "@/lib/session";
 import { usePriceLevels } from "@/lib/privacy";
 import { money, n, units } from "@/lib/format";
-import type { Product } from "@/lib/types";
+import type { Product, Supplier } from "@/lib/types";
 import { Button, Checkbox, Empty, ErrorNote, Field, Input, Loading, PageHeader, Panel, Select, Table, Td, Th, Pagination } from "@/components/ui";
 import { ItemCode } from "@/components/ItemCode";
 import { ProductForm } from "@/components/forms";
@@ -29,6 +29,15 @@ export default function ProductsPage() {
   const [dateMode, setDateMode] = useState<"" | "old" | "range">("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
+  // Company (supplier), our cost range and fixed selling price
+  const [supplierId, setSupplierId] = useState("");
+  const [costMin, setCostMin] = useState("");
+  const [costMax, setCostMax] = useState("");
+  const [fixedMode, setFixedMode] = useState<"" | "yes" | "no">("");
+  const [fixedMin, setFixedMin] = useState("");
+  const [fixedMax, setFixedMax] = useState("");
+  const amounts = useDebounced(`${costMin}|${costMax}|${fixedMin}|${fixedMax}`);
+  const { data: suppliers } = useApi<Supplier[]>("/suppliers");
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(50);
   const debounced = useDebounced(q);
@@ -44,6 +53,21 @@ export default function ProductsPage() {
   const params = new URLSearchParams({ page: String(page), limit: String(limit), sort: sort.sort, dir: sort.dir });
   if (debounced) params.set("q", debounced);
   if (categoryId) params.set("categoryId", categoryId);
+  if (supplierId) params.set("supplierId", supplierId);
+  {
+    const [cMin, cMax, fMin, fMax] = amounts.split("|");
+    if (showCost && cMin) params.set("costMin", cMin);
+    if (showCost && cMax) params.set("costMax", cMax);
+    if (fixedMode) params.set("fixed", fixedMode);
+    if (fixedMode !== "no" && fMin) params.set("fixedMin", fMin);
+    if (fixedMode !== "no" && fMax) params.set("fixedMax", fMax);
+  }
+  const filtered = !!(q || categoryId || supplierId || costMin || costMax || fixedMode || fixedMin || fixedMax || dateMode || lowStock || inStock);
+  const clearFilters = () => {
+    setQ(""); setCategoryId(""); setSupplierId(""); setCostMin(""); setCostMax("");
+    setFixedMode(""); setFixedMin(""); setFixedMax(""); setDateMode(""); setDateFrom(""); setDateTo("");
+    setLowStock(false); setInStock(false); setPage(1);
+  };
   if (lowStock) params.set("lowStock", "true");
   if (inStock) params.set("inStock", "true");
   if (dateMode === "old") params.set("dateIn", "old");
@@ -75,7 +99,7 @@ export default function ProductsPage() {
       />
       <Panel padded={false}>
         <div className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-[2fr_1fr_1fr_auto]">
-          <Field label="Search"><Input placeholder="Code, name or collection (e.g. W0930, Avalon)" value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} /></Field>
+          <Field label="Search"><Input placeholder="Code, name, company, date in (10/09/2026), old, price…" value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} /></Field>
           <Field label="Category">
             <Select value={categoryId} onChange={(e) => { setCategoryId(e.target.value); setPage(1); }}>
               <option value="">All categories</option>
@@ -100,6 +124,45 @@ export default function ProductsPage() {
           <div className="flex flex-col justify-end gap-1 pb-1">
             <Checkbox label="Running low" checked={lowStock} onChange={(v) => { setLowStock(v); setPage(1); }} />
             <Checkbox label="In stock only" checked={inStock} onChange={(v) => { setInStock(v); setPage(1); }} />
+          </div>
+        </div>
+        <div className="grid gap-3 border-t border-hairline px-4 pb-4 pt-3 sm:grid-cols-2 lg:grid-cols-[1.4fr_1.3fr_1fr_1.3fr_auto]">
+          <Field label="Company (supplier)">
+            <Select value={supplierId} onChange={(e) => { setSupplierId(e.target.value); setPage(1); }}>
+              <option value="">All companies</option>
+              <option value="none">No supplier</option>
+              {[...(suppliers ?? [])]
+                .sort((a, b) => a.name.localeCompare(b.name, "en", { sensitivity: "base", numeric: true }))
+                .map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
+            </Select>
+          </Field>
+          {showCost ? (
+            <div>
+              <span className="mb-1.5 block text-sm font-semibold text-walnut">Our cost</span>
+              <div className="grid grid-cols-2 gap-2">
+                <Input type="number" min={0} step="0.01" placeholder="From $" aria-label="Our cost from" value={costMin} onChange={(e) => { setCostMin(e.target.value); setPage(1); }} />
+                <Input type="number" min={0} step="0.01" placeholder="To $" aria-label="Our cost to" value={costMax} onChange={(e) => { setCostMax(e.target.value); setPage(1); }} />
+              </div>
+            </div>
+          ) : <div />}
+          <Field label="Fixed selling price">
+            <Select value={fixedMode} onChange={(e) => { setFixedMode(e.target.value as "" | "yes" | "no"); setPage(1); }}>
+              <option value="">Any</option>
+              <option value="yes">Has a fixed price</option>
+              <option value="no">No fixed price</option>
+            </Select>
+          </Field>
+          {fixedMode !== "no" ? (
+            <div>
+              <span className="mb-1.5 block text-sm font-semibold text-walnut">Fixed price between</span>
+              <div className="grid grid-cols-2 gap-2">
+                <Input type="number" min={0} step="0.01" placeholder="From $" aria-label="Fixed selling price from" value={fixedMin} onChange={(e) => { setFixedMin(e.target.value); setPage(1); }} />
+                <Input type="number" min={0} step="0.01" placeholder="To $" aria-label="Fixed selling price to" value={fixedMax} onChange={(e) => { setFixedMax(e.target.value); setPage(1); }} />
+              </div>
+            </div>
+          ) : <div />}
+          <div className="flex items-end">
+            <Button variant="ghost" disabled={!filtered} onClick={clearFilters}>Clear filters</Button>
           </div>
         </div>
         <ErrorNote>{error}</ErrorNote>
