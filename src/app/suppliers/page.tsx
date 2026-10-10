@@ -6,14 +6,18 @@ import { useApi } from "@/lib/hooks";
 import { useSession } from "@/lib/session";
 import { money, n, termsLabel } from "@/lib/format";
 import type { Supplier } from "@/lib/types";
-import { Search } from "lucide-react";
+import { Search, Trash2 } from "lucide-react";
 import { Badge, Button, Checkbox, Empty, ErrorNote, Input, Loading, PageHeader, Pagination, Panel, Table, Td, Th } from "@/components/ui";
 import { SupplierForm } from "@/components/forms";
+import { DeleteSupplierDialog } from "@/components/DeleteSupplierDialog";
 
 export default function SuppliersPage() {
   const router = useRouter();
   const { can } = useSession();
-  const { data, error, loading, reload } = useApi<Supplier[]>("/suppliers");
+  const [showDeleted, setShowDeleted] = useState(false);
+  const { data, error, loading, reload } = useApi<Supplier[]>(showDeleted ? "/suppliers?all=1" : "/suppliers");
+  const [deleting, setDeleting] = useState<Supplier | null>(null);
+  const canChange = can("MANAGER", "ACCOUNTANT");
   const [adding, setAdding] = useState(false);
   // Search box: name, contact, phone, email, address or account number. Every word must match.
   const [q, setQ] = useState("");
@@ -52,6 +56,7 @@ export default function SuppliersPage() {
             />
           </div>
           <Checkbox label="Only ones we owe" checked={owing} onChange={(v) => { setOwing(v); setPage(1); }} />
+          <Checkbox label="Show deleted / inactive" checked={showDeleted} onChange={(v) => { setShowDeleted(v); setPage(1); }} />
           {data && <span className="text-sm text-oak">{shown.length === data.length ? `${data.length} suppliers` : `${shown.length} of ${data.length} suppliers`}</span>}
         </div>
         <ErrorNote>{error}</ErrorNote>
@@ -65,14 +70,14 @@ export default function SuppliersPage() {
           <>
           <Table>
             <thead>
-              <tr><Th>Supplier</Th><Th>Contact</Th><Th>Terms</Th><Th className="text-right">Discount off list</Th><Th>Early pay</Th><Th>Late fee</Th><Th className="text-right">Items</Th><Th className="text-right">We owe</Th></tr>
+              <tr><Th>Supplier</Th><Th>Contact</Th><Th>Terms</Th><Th className="text-right">Discount off list</Th><Th>Early pay</Th><Th>Late fee</Th><Th className="text-right">Items</Th><Th className="text-right">We owe</Th>{canChange && <Th className="text-right">Change</Th>}</tr>
             </thead>
             <tbody>
               {pageRows.map((s) => (
                 <tr key={s.id}>
                   <Td>
                     <Link href={`/suppliers/${s.id}`} className="font-semibold text-walnut underline">{s.name}</Link>
-                    {!s.active && <Badge>Inactive</Badge>}
+                    {!s.active && <> <Badge>Deleted / inactive</Badge></>}
                   </Td>
                   <Td>{s.contactName}<div className="text-xs text-oak">{s.phone}</div></Td>
                   <Td>{termsLabel(s.paymentTermsDays)}</Td>
@@ -81,6 +86,15 @@ export default function SuppliersPage() {
                   <Td>{n(s.lateFeePct) > 0 || n(s.lateFeeFlat) > 0 ? [n(s.lateFeePct) && `${n(s.lateFeePct)}%`, n(s.lateFeeFlat) && money(s.lateFeeFlat)].filter(Boolean).join(" + ") : "—"}</Td>
                   <Td className="num">{s.productCount}</Td>
                   <Td className={`num font-medium ${(s.overdue ?? 0) > 0 ? "text-late" : ""}`}>{money(s.balance)}</Td>
+                  {canChange && (
+                    <Td className="whitespace-nowrap text-right">
+                      {s.active && (
+                        <Button size="sm" variant="ghost" className="text-late hover:bg-late/10" onClick={() => setDeleting(s)} aria-label={`Delete ${s.name}`}>
+                          <Trash2 size={15} /> Delete
+                        </Button>
+                      )}
+                    </Td>
+                  )}
                 </tr>
               ))}
             </tbody>
@@ -89,6 +103,7 @@ export default function SuppliersPage() {
           </>
         )}
       </Panel>
+      <DeleteSupplierDialog supplier={deleting} onClose={() => setDeleting(null)} onDeleted={() => { setDeleting(null); reload(); }} />
       <SupplierForm open={adding} onClose={() => setAdding(false)} onSaved={() => reload()} />
     </>
   );

@@ -432,6 +432,9 @@ export function ProductForm({
           <Select value={f.supplierId} onChange={(e) => set("supplierId", e.target.value)}>
             <option value="">—</option>
             {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+            {f.supplierId !== "" && product?.supplier && !suppliers.some((s) => String(s.id) === String(f.supplierId)) && (
+              <option value={String(f.supplierId)}>{product.supplier.name} (inactive)</option>
+            )}
           </Select>
         </Field>
         <Field label="Collection / door style"><Input value={f.collection} onChange={(e) => set("collection", e.target.value)} /></Field>

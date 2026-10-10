@@ -10,6 +10,7 @@ import type { Bill, Supplier } from "@/lib/types";
 import { Button, Empty, ErrorNote, Loading, PageHeader, Panel, Stat, Table, Tabs, Td, Th } from "@/components/ui";
 import { BillStatus } from "@/components/status";
 import { SupplierForm } from "@/components/forms";
+import { DeleteSupplierDialog } from "@/components/DeleteSupplierDialog";
 import { ItemCode } from "@/components/ItemCode";
 
 interface Detail extends Supplier {
@@ -25,6 +26,7 @@ export default function SupplierPage() {
   const { can } = useSession();
   const { data: s, error, reload } = useApi<Detail>(`/suppliers/${id}`);
   const [editing, setEditing] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [tab, setTab] = useState<"bills" | "orders" | "items">("bills");
   if (error) return <ErrorNote>{error}</ErrorNote>;
   if (!s) return <Loading />;
@@ -34,10 +36,11 @@ export default function SupplierPage() {
       <PageHeader
         title={s.name}
         back={{ label: "Back to suppliers", onClick: () => (window.history.length > 1 ? router.back() : router.push("/suppliers")) }}
-        subtitle={[s.contactName, s.phone, s.email].filter(Boolean).join(" · ")}
+        subtitle={[!s.active && "Deleted / inactive", s.contactName, s.phone, s.email].filter(Boolean).join(" · ")}
         actions={
           can("MANAGER", "ACCOUNTANT") && (
             <>
+              {s.active && <Button variant="danger" onClick={() => setDeleting(true)}>Delete supplier</Button>}
               <Button variant="secondary" onClick={() => setEditing(true)}>Edit supplier</Button>
               <Link href={`/purchase-orders?supplier=${s.id}`}><Button>New purchase order</Button></Link>
             </>
@@ -132,6 +135,7 @@ export default function SupplierPage() {
         </div>
       </div>
       <SupplierForm open={editing} onClose={() => setEditing(false)} supplier={s} onSaved={() => reload()} />
+      <DeleteSupplierDialog supplier={deleting ? s : null} onClose={() => setDeleting(false)} onDeleted={() => router.push("/suppliers")} />
     </>
   );
 }
