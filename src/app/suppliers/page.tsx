@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useApi } from "@/lib/hooks";
 import { useSession } from "@/lib/session";
-import { money, n } from "@/lib/format";
+import { money, n, termsLabel } from "@/lib/format";
 import type { Supplier } from "@/lib/types";
 import { Search } from "lucide-react";
 import { Badge, Button, Checkbox, Empty, ErrorNote, Input, Loading, PageHeader, Pagination, Panel, Table, Td, Th } from "@/components/ui";
@@ -75,7 +75,7 @@ export default function SuppliersPage() {
                     {!s.active && <Badge>Inactive</Badge>}
                   </Td>
                   <Td>{s.contactName}<div className="text-xs text-oak">{s.phone}</div></Td>
-                  <Td>Net {s.paymentTermsDays}</Td>
+                  <Td>{termsLabel(s.paymentTermsDays)}</Td>
                   <Td className="num">{n(s.tradeDiscountPct)}%</Td>
                   <Td>{n(s.earlyPayDiscountPct) > 0 ? `${n(s.earlyPayDiscountPct)}% in ${s.earlyPayDiscountDays} days` : "—"}</Td>
                   <Td>{n(s.lateFeePct) > 0 || n(s.lateFeeFlat) > 0 ? [n(s.lateFeePct) && `${n(s.lateFeePct)}%`, n(s.lateFeeFlat) && money(s.lateFeeFlat)].filter(Boolean).join(" + ") : "—"}</Td>

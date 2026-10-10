@@ -54,7 +54,7 @@ export default function SupplierPage() {
       <div className="mt-6 grid gap-6 xl:grid-cols-[340px_1fr]">
         <Panel title="Contract">
           <dl className="space-y-3 text-sm">
-            <div><dt className="text-oak">Pay within</dt><dd>{s.paymentTermsDays} days</dd></div>
+            <div><dt className="text-oak">Pay within</dt><dd>{s.paymentTermsDays > 0 ? `${s.paymentTermsDays} days` : "Due on receipt"}</dd></div>
             <div><dt className="text-oak">Discount off list</dt><dd>{n(s.tradeDiscountPct)}%</dd></div>
             <div><dt className="text-oak">Early-payment discount</dt><dd>{n(s.earlyPayDiscountPct) > 0 ? `${n(s.earlyPayDiscountPct)}% if paid within ${s.earlyPayDiscountDays} days` : "None"}</dd></div>
             <div><dt className="text-oak">Late fee</dt><dd>{n(s.lateFeePct) || n(s.lateFeeFlat) ? `${n(s.lateFeePct)}% of balance + ${money(s.lateFeeFlat)}` : "None"}</dd></div>

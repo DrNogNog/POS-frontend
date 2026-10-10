@@ -160,7 +160,7 @@ const emptySupplier = {
   email: "",
   address: "",
   accountNumber: "",
-  paymentTermsDays: 30,
+  paymentTermsDays: 0, // new suppliers default to "Due on receipt"
   tradeDiscountPct: 0 as number | string,
   earlyPayDiscountPct: 0 as number | string,
   earlyPayDiscountDays: 0 as number | string,
