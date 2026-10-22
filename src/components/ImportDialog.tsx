@@ -12,7 +12,7 @@ import { Download, FileUp } from "lucide-react";
 import { api } from "@/lib/api";
 import { PRICE_LIST_COLUMNS, downloadText, normalizePriceList, parseCsv } from "@/lib/csv";
 import { money, n } from "@/lib/format";
-import { Badge, Button, Modal, Table, Td, Th } from "./ui";
+import { Badge, Button, Checkbox, Modal, Table, Td, Th } from "./ui";
 
 type Row = Record<string, string>;
 const CHUNK = 500;
@@ -30,18 +30,20 @@ function priceIn(r: Row) {
 
 export function ImportDialog({ open, onClose, onDone }: { open: boolean; onClose: () => void; onDone: () => void }) {
   const [fileName, setFileName] = useState("");
-  const [rows, setRows] = useState<Row[]>([]);
+  const [goodRows, setGoodRows] = useState<Row[]>([]);
+  // Stock count: items already in the POS get this file's count ADDED to their stock
+  const [addMode, setAddMode] = useState(false);
   const [skipped, setSkipped] = useState(0);
   const [dupes, setDupes] = useState(0);
   const [showColumns, setShowColumns] = useState(false);
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
-  const [result, setResult] = useState<{ created: number; updated: number } | null>(null);
+  const [result, setResult] = useState<{ created: number; updated: number; stockAdded: number } | null>(null);
   const [error, setError] = useState("");
   const fileInput = useRef<HTMLInputElement>(null);
 
   function reset() {
     setFileName("");
-    setRows([]);
+    setGoodRows([]);
     setSkipped(0);
     setDupes(0);
     setProgress(null);
@@ -65,20 +67,36 @@ export function ImportDialog({ open, onClose, onDone }: { open: boolean; onClose
     }
     const all = normalizePriceList(parseCsv(await file.text()));
     const good = all.filter((r) => r.itemCode && r.name);
-    const seen = new Map<string, Row>();
-    for (const r of good) seen.set(r.itemCode.toUpperCase(), r); // last one in the file wins
-    setRows([...seen.values()]);
+    setGoodRows(good);
     setSkipped(all.length - good.length);
-    setDupes(good.length - seen.size);
+    setDupes(good.length - new Set(good.map((r) => r.itemCode.toUpperCase())).size);
     if (!all.length) setError("No rows found. The first line must be the column headings (see the template).");
     else if (!good.length) setError("No row has both an item code and a name. Check the column headings against the template.");
   }
+
+  // A code listed twice: a price list keeps the last line; a stock count adds the counts up
+  const rows = (() => {
+    const seen = new Map<string, Row>();
+    for (const r of goodRows) {
+      const key = r.itemCode.toUpperCase();
+      const before = seen.get(key);
+      if (before && addMode) {
+        seen.set(key, {
+          ...before,
+          qtyOnHand: String(n(before.qtyOnHand) + n(r.qtyOnHand)),
+          description: [before.description, r.description].filter(Boolean).filter((d, i, a) => a.indexOf(d) === i).join("; "),
+        });
+      } else seen.set(key, r);
+    }
+    return [...seen.values()];
+  })();
 
   async function importRows() {
     setError("");
     setProgress({ done: 0, total: rows.length });
     let created = 0;
     let updated = 0;
+    let stockAdded = 0;
     try {
       for (let i = 0; i < rows.length; i += CHUNK) {
         const chunk = rows.slice(i, i + CHUNK).map((r) => ({
@@ -88,12 +106,15 @@ export function ImportDialog({ open, onClose, onDone }: { open: boolean; onClose
           unitCost: r.unitCost ? r.unitCost : undefined,
           qtyOnHand: r.qtyOnHand ? r.qtyOnHand : undefined,
         }));
-        const res = await api<{ created: number; updated: number }>("/products/import", { body: { rows: chunk } });
+        const res = await api<{ created: number; updated: number; stockAdded?: number }>("/products/import", {
+          body: { rows: chunk, mode: addMode ? "add" : "replace" },
+        });
         created += res.created;
         updated += res.updated;
+        stockAdded += res.stockAdded ?? 0;
         setProgress({ done: Math.min(i + CHUNK, rows.length), total: rows.length });
       }
-      setResult({ created, updated });
+      setResult({ created, updated, stockAdded });
       onDone();
     } catch (e) {
       setError(`${e instanceof Error ? e.message : String(e)} — ${created + updated} items were saved before this stopped. Fix the file and import again; saved items will just be updated.`);
@@ -176,7 +197,7 @@ export function ImportDialog({ open, onClose, onDone }: { open: boolean; onClose
                   <Badge tone="paid">{rows.length.toLocaleString()} items ready</Badge>
                   {withStock > 0 && <Badge>{withStock.toLocaleString()} with opening stock</Badge>}
                   {skipped > 0 && <Badge tone="due">{skipped} rows skipped (no code or name)</Badge>}
-                  {dupes > 0 && <Badge tone="due">{dupes} repeated codes (last one used)</Badge>}
+                  {dupes > 0 && <Badge tone="due">{dupes} repeated codes ({addMode ? "counts added together" : "last one used"})</Badge>}
                 </div>
                 <div className="mt-3 overflow-hidden rounded-lux border border-hairline">
                   <Table>
@@ -199,10 +220,18 @@ export function ImportDialog({ open, onClose, onDone }: { open: boolean; onClose
                   </Table>
                   {rows.length > 5 && <p className="px-6 py-2 text-xs text-oak">…and {(rows.length - 5).toLocaleString()} more</p>}
                 </div>
-                <p className="mt-3 text-sm text-oak">
-                  Items whose code already exists get their name, prices and supplier updated — their stock isn&apos;t touched.
-                  New items are added, and their quantity (if any) is booked in as opening stock.
-                </p>
+                <div className="mt-3 rounded-lux border border-hairline px-4 py-3">
+                  <Checkbox
+                    label="This is a stock count — add these quantities to items already in the POS"
+                    checked={addMode}
+                    onChange={setAddMode}
+                  />
+                  <p className="mt-1 pl-7 text-sm text-oak">
+                    {addMode
+                      ? "Items already in the POS keep their name, prices and supplier; this file's quantity is added to their stock and its description (e.g. where they are) is added to theirs. New items are added with their quantity."
+                      : "Items whose code already exists get their name, prices and supplier updated — their stock isn't touched. New items are added, and their quantity (if any) is booked in as opening stock."}
+                  </p>
+                </div>
               </>
             )}
             {progress && (
@@ -212,7 +241,12 @@ export function ImportDialog({ open, onClose, onDone }: { open: boolean; onClose
                 </div>
                 <p className="mt-1 text-sm text-oak">
                   {result
-                    ? <span className="font-semibold text-paid">Done — {result.created.toLocaleString()} new items added, {result.updated.toLocaleString()} updated.</span>
+                    ? <span className="font-semibold text-paid">
+                        Done — {result.created.toLocaleString()} new items added,{" "}
+                        {addMode
+                          ? `${result.stockAdded.toLocaleString()} items already in the POS had stock added.`
+                          : `${result.updated.toLocaleString()} updated.`}
+                      </span>
                     : `Importing ${progress.done.toLocaleString()} of ${progress.total.toLocaleString()}…`}
                 </p>
               </div>
